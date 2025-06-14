@@ -1,3 +1,3 @@
 # Mangxia
 
-This is a heart diseas medication tracker app.
+This is a heart disease medication tracker app.
