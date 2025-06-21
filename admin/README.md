@@ -1,54 +1,76 @@
-# React + TypeScript + Vite
+# 心脏瓣膜术后服药随访系统 - Admin 端
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+本项目是心脏瓣膜术后服药随访系统的医生管理后台（Admin端），前端基于 React 和 Vite 构建，旨在帮助医生高效管理患者的华法林用药情况。
 
-Currently, two official plugins are available:
+## ✨ 主要功能
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **患者列表**: 集中展示所有患者的核心信息，包括手术信息、最新INR指标及系统建议。
+- **患者详情**: 查看单个患者的完整病史、用药记录，并可对用药建议进行"确认"、"修改"、"拒绝"等操作。
+- **新增患者**: 通过表单快速录入新患者的基本信息和初始用药情况。
+- **纯前端交互**: 所有功能均在前端完成，无需后端服务，方便快速验证和迭代。
 
-## Expanding the ESLint configuration
+## 🚀 技术栈
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- **框架**: [React](https://react.dev/)
+- **构建工具**: [Vite](https://vitejs.dev/)
+- **路由**: [React Router](https://reactrouter.com/)
+- **语言**: TypeScript
 
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
-```
+## 📦 如何运行
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+1.  **克隆项目到本地**
+    ```bash
+    # 如果你是从git仓库clone
+    git clone [your-repo-url]
+    cd mangxia/admin
+    ```
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+2.  **安装依赖**
+    在 `mangxia/admin` 目录下运行：
+    ```bash
+    npm install
+    ```
 
-export default tseslint.config({
-  plugins: {
-    // Add the react-x and react-dom plugins
-    'react-x': reactX,
-    'react-dom': reactDom,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended typescript rules
-    ...reactX.configs['recommended-typescript'].rules,
-    ...reactDom.configs.recommended.rules,
-  },
-})
-```
+3.  **启动开发服务器**
+    ```bash
+    npm run dev
+    ```
+
+4.  **在浏览器中打开**
+    终端会输出一个本地访问地址，通常是 `http://localhost:5173`。在浏览器中打开此地址即可查看页面。
+
+## 📝 现有页面与功能
+
+### 1. 患者列表页 (`/`)
+
+- 默认展示所有患者信息，按时间倒序排列。
+- **操作**:
+    - **查看**: 点击跳转到患者详情页。
+    - **确认**: 在本页直接确认系统建议，状态变为"已确认"且不可再操作。
+
+### 2. 患者详情页 (`/patient/:id`)
+
+- 展示患者的详细信息、病史和完整的用药记录表格。
+- **操作 (用药记录)**:
+    - **修改**: 点击后，"医生确认用量"和"备注"变为可编辑状态，按钮变为"保存"和"取消"。
+    - **确认**: 弹窗确认后，该条记录状态变为"已确认"，按钮消失。
+    - **拒绝**: 弹窗确认后，该条记录状态变为"已拒绝"，按钮消失。
+
+### 3. 新增患者页 (`/add`)
+
+- 一个标准化的表单，用于录入新患者。
+- **校验**:
+    - 除"备注"外，所有字段均为必填。
+    - 手机号必须为11位数字。
+- **提交**: 点击"注册新患者"后，会弹窗确认，成功后自动将新患者添加到列表并跳转回首页。
+
+## 下一步计划
+
+- [ ] 实现筛选和搜索功能
+- [ ] 优化表单校验提示
+- [ ] 将组件拆分为独立文件
+- [ ] 对接后端真实API
+
+---
+
+> 该项目为一个纯前端原型，所有数据均存储在前端内存中，刷新页面会重置所有修改。
