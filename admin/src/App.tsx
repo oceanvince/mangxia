@@ -1,6 +1,6 @@
 import './App.css'
-import { Routes, Route, useNavigate, useParams, useLocation } from 'react-router-dom'
-import { useState, useEffect } from 'react'
+import { Routes, Route, useNavigate, useParams, useLocation, NavLink } from 'react-router-dom'
+import { useState, useEffect, useCallback } from 'react'
 
 // 模拟患者数据
 const mockPatients = [
@@ -90,112 +90,93 @@ const mockPatients = [
   },
 ]
 
+// 新增：状态徽标组件
+const StatusBadge = ({ status }: { status: string }) => {
+  const statusMap: { [key: string]: { text: string, className: string } } = {
+    pending: { text: '待确认', className: 'status-pending' },
+    active: { text: '已确认', className: 'status-confirmed' },
+    rejected: { text: '已拒绝', className: 'status-rejected' },
+  };
+
+  const { text, className } = statusMap[status] || { text: status, className: '' };
+
+  return (
+    <span className={`status-badge ${className}`}>{text}</span>
+  );
+};
+
+// 公共辅助函数：计算年龄
+const calculateAge = (dob: string | null) => {
+  if (!dob) return 'N/A';
+  try {
+    const birthDate = new Date(dob);
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age;
+  } catch (e) {
+    return 'N/A';
+  }
+};
+
 function Sidebar() {
-  const navigate = useNavigate()
   const location = useLocation()
+  const getLinkClass = (path: string) => {
+    if (path === '/' && location.pathname.startsWith('/patient/')) {
+      return 'sidebar-item active'
+    }
+    return location.pathname === path ? 'sidebar-item active' : 'sidebar-item'
+  }
   return (
     <aside className="sidebar">
       <div className="sidebar-title">芒夏Admin</div>
-      <nav>
-        <div
-          className={`sidebar-item${(location.pathname === '/' || location.pathname.startsWith('/patient')) ? ' active' : ''}`}
-          onClick={() => navigate('/')}
-          style={{ cursor: 'pointer' }}
-        >
-          患者列表
-        </div>
-        <div
-          className={`sidebar-item${location.pathname === '/add' ? ' active' : ''}`}
-          onClick={() => navigate('/add')}
-          style={{ cursor: 'pointer' }}
-        >
-          新增患者
-        </div>
-      </nav>
+      <NavLink to="/" className={getLinkClass('/')}>患者列表</NavLink>
+      <NavLink to="/add-patient" className={getLinkClass('/add-patient')}>新增患者</NavLink>
     </aside>
   )
 }
 
-function PatientListPage({ patients, setPatients }: { patients: any[], setPatients: (patients: any[]) => void }) {
+function PatientListPage() {
   const navigate = useNavigate()
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [patients, setPatients] = useState<any[]>([])
 
   useEffect(() => {
     const fetchPatients = async () => {
       try {
-        const response = await fetch('http://localhost:3001/api/patients');
+        const response = await fetch('http://localhost:3001/api/patients')
         if (!response.ok) {
-          throw new Error('Network response was not ok');
+          throw new Error('Network response was not ok')
         }
-        const result = await response.json();
+        const result = await response.json()
         if (result.success && Array.isArray(result.data)) {
-          // 将后端数据结构映射到前端所需的结构
-          const formattedData = result.data.map((p: any) => {
-            // 安全地格式化日期，只取年月日
-            const formatDate = (dateString: string | null) => {
-              if (!dateString) return 'N/A';
-              try {
-                return new Date(dateString).toISOString().split('T')[0];
-              } catch (e) {
-                return '日期无效';
-              }
-            };
-
-            // 从生日计算年龄
-            const calculateAge = (dob: string | null) => {
-              if (!dob) return 'N/A';
-              try {
-                const birthDate = new Date(dob);
-                const today = new Date();
-                let age = today.getFullYear() - birthDate.getFullYear();
-                const m = today.getMonth() - birthDate.getMonth();
-                if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
-                  age--;
-                }
-                return age;
-              } catch (e) {
-                return 'N/A';
-              }
-            };
-
-            return {
-              id: p.patient_id || '无ID',
-              name: p.patient_name || '无姓名',
-              phone: p.phone_number || '无手机号',
-              gender: p.gender === 'male' ? '男' : p.gender === 'female' ? '女' : '未知',
-              age: calculateAge(p.date_of_birth),
-              surgeryType: p.surgery_type || 'N/A',
-              surgeryDate: formatDate(p.operation_date),
-              dischargeDate: formatDate(p.discharge_date),
-              // --- 以下字段在列表API中暂不提供，给予默认值 ---
-              latestINR: 'N/A',
-              testDate: 'N/A',
-              currentDose: 'N/A',
-              suggestedDose: 'N/A',
-              status: '已确认', // 列表页默认为已确认
-            };
-          });
-          setPatients(formattedData);
+          const formattedData = result.data.map((p: any) => ({
+            id: p.patient_id || '无ID',
+            name: p.patient_name || '无姓名',
+            phone: p.phone_number || '无手机号',
+            gender: p.gender === 'male' ? '男' : '女',
+            age: calculateAge(p.date_of_birth),
+            surgeryType: p.surgery_type || 'N/A',
+            surgeryDate: p.operation_date || 'N/A',
+            dischargeDate: p.discharge_date || 'N/A',
+            latestINR: 'N/A',
+            testDate: 'N/A',
+            currentDose: 'N/A',
+            suggestedDose: 'N/A',
+          }))
+          setPatients(formattedData)
         } else {
-          throw new Error('Invalid data format from API');
+          throw new Error(result.message || 'Failed to fetch patients')
         }
-      } catch (err: any) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
+      } catch (error) {
+        console.error("Failed to fetch patients:", error)
       }
-    };
+    }
 
-    fetchPatients();
-  }, [setPatients]);
-
-  if (loading) return <div>Loading...</div>;
-  if (error) return <div>Error: {error}</div>;
-  
-  const handleConfirm = (id: string) => {
-    // ... (this will need API call later)
-  };
+    fetchPatients()
+  }, [])
 
   return (
     <div className="container">
@@ -240,18 +221,10 @@ function PatientListPage({ patients, setPatients }: { patients: any[], setPatien
                 <td>{p.currentDose}</td>
                 <td>{p.suggestedDose}</td>
                 <td>
-                  <a href="#" style={{ color: '#1677ff', marginRight: 8 }} onClick={e => { e.preventDefault(); navigate(`/patient/${p.id}`) }}>查看</a>
-                  {p.status === '待认' ? (
-                    <a
-                      href="#"
-                      style={{ color: 'red' }}
-                      onClick={e => { e.preventDefault(); handleConfirm(p.id); }}
-                    >
-                      确认
-                    </a>
-                  ) : (
-                    <span style={{ color: 'gray' }}>已确认</span>
-                  )}
+                  <a href="#" style={{ color: '#1677ff' }} onClick={(e) => {
+                    e.preventDefault();
+                    navigate(`/patient/${p.id}`);
+                  }}>查看</a>
                 </td>
               </tr>
             ))}
@@ -263,7 +236,7 @@ function PatientListPage({ patients, setPatients }: { patients: any[], setPatien
 }
 
 function PatientDetailPage() {
-  const { id } = useParams<{ id: string }>();
+  const { patientId } = useParams<{ patientId: string }>();
   const [patient, setPatient] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -273,7 +246,7 @@ function PatientDetailPage() {
   const [editValues, setEditValues] = useState({ doctorDose: '', note: '' });
 
   useEffect(() => {
-    if (!id) {
+    if (!patientId) {
       setError('No patient ID provided');
       setLoading(false);
       return;
@@ -282,7 +255,7 @@ function PatientDetailPage() {
     const fetchPatientDetail = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`http://localhost:3001/api/patients/${id}`);
+        const response = await fetch(`http://localhost:3001/api/patients/${patientId}`);
         if (!response.ok) {
           throw new Error(`Network response was not ok (${response.status})`);
         }
@@ -300,7 +273,7 @@ function PatientDetailPage() {
     };
 
     fetchPatientDetail();
-  }, [id]);
+  }, [patientId]);
 
 
   if (loading) {
@@ -312,23 +285,6 @@ function PatientDetailPage() {
   if (!patient) {
     return <div>未找到该患者的信息</div>;
   }
-
-  // 计算年龄的辅助函数
-  const calculateAge = (dob: string | null) => {
-    if (!dob) return 'N/A';
-    try {
-      const birthDate = new Date(dob);
-      const today = new Date();
-      let age = today.getFullYear() - birthDate.getFullYear();
-      const m = today.getMonth() - birthDate.getMonth();
-      if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
-        age--;
-      }
-      return age;
-    } catch (e) {
-      return 'N/A';
-    }
-  };
 
   // 编辑保存 (TODO: call API)
   const handleSave = (rowId: string) => {
@@ -435,7 +391,9 @@ function PatientDetailPage() {
                   <td>{r.id}</td>
                   <td>{r.dose}</td>
                   <td>{r.sysDose}</td>
-                  <td>{r.confirmStatus}</td>
+                  <td>
+                    <StatusBadge status={r.confirmStatus} />
+                  </td>
                   <td>
                     {editRow === r.id ? (
                       <input value={editValues.doctorDose} onChange={e => setEditValues(v => ({ ...v, doctorDose: e.target.value }))} style={{ width: 60 }} />
@@ -452,18 +410,21 @@ function PatientDetailPage() {
                   </td>
                   <td>{r.testDate}</td>
                   <td>
-                    {r.confirmStatus === 'pending' && editRow !== r.id && (
-                      <>
-                        <a href="#" style={{ color: '#1677ff', marginRight: 8 }} onClick={e => { e.preventDefault(); handleEdit(r) }}>修改</a>
-                        <a href="#" style={{ color: 'red', marginRight: 8 }} onClick={e => { e.preventDefault(); handleConfirm(r.id) }}>确认</a>
-                        <a href="#" style={{ color: 'gray' }} onClick={e => { e.preventDefault(); handleReject(r.id) }}>拒绝</a>
-                      </>
-                    )}
-                    {editRow === r.id && (
-                      <>
-                        <a href="#" style={{ color: '#1677ff', marginRight: 8 }} onClick={e => { e.preventDefault(); handleSave(r.id) }}>保存</a>
-                        <a href="#" style={{ color: 'gray' }} onClick={e => { e.preventDefault(); handleCancel() }}>取消</a>
-                      </>
+                    {r.confirmStatus === 'pending' ? (
+                      editRow === r.id ? (
+                        <>
+                          <a href="#" style={{ color: '#1677ff', marginRight: 8 }} onClick={e => { e.preventDefault(); handleSave(r.id) }}>保存</a>
+                          <a href="#" style={{ color: 'gray' }} onClick={e => { e.preventDefault(); handleCancel() }}>取消</a>
+                        </>
+                      ) : (
+                        <>
+                          <a href="#" style={{ color: '#1677ff', marginRight: 8 }} onClick={e => { e.preventDefault(); handleEdit(r) }}>修改</a>
+                          <a href="#" style={{ color: 'red', marginRight: 8 }} onClick={e => { e.preventDefault(); handleConfirm(r.id) }}>确认</a>
+                          <a href="#" style={{ color: 'gray' }} onClick={e => { e.preventDefault(); handleReject(r.id) }}>拒绝</a>
+                        </>
+                      )
+                    ) : (
+                      '—'
                     )}
                   </td>
                 </tr>
@@ -476,7 +437,7 @@ function PatientDetailPage() {
   )
 }
 
-function AddPatientPage({ onAdd }: { onAdd: (patient: any) => void }) {
+function AddPatientPage() {
   const navigate = useNavigate()
   const [formData, setFormData] = useState({
     name: '',
@@ -528,8 +489,7 @@ function AddPatientPage({ onAdd }: { onAdd: (patient: any) => void }) {
             },
             body: JSON.stringify({
               ...formData,
-              // 后端需要数字类型
-              age: Number(formData.age),
+              age: Number(formData.age) || null,
             }),
           })
 
@@ -537,9 +497,7 @@ function AddPatientPage({ onAdd }: { onAdd: (patient: any) => void }) {
 
           if (response.ok && result.success) {
             alert('患者添加成功!')
-            // 调用父组件的回调，在前端实时更新列表
-            onAdd(result.data)
-            navigate('/') // 跳转回列表页
+            navigate('/') // 直接跳转，列表页会自己刷新
           } else {
             throw new Error(result.message || '提交失败，请检查数据。');
           }
@@ -581,21 +539,11 @@ function AddPatientPage({ onAdd }: { onAdd: (patient: any) => void }) {
 }
 
 function App() {
-  const [patients, setPatients] = useState<any[]>([]);
-
-  const handleConfirm = (id: string) => {
-    // ... (this will need API call later)
-  };
-
-  const handleAdd = (patient: any) => {
-    // ... (this will need API call later)
-  };
-
   return (
     <Routes>
-      <Route path="/" element={<PatientListPage patients={patients} setPatients={setPatients} />} />
-      <Route path="/patient/:id" element={<PatientDetailPage />} />
-      <Route path="/add" element={<AddPatientPage onAdd={handleAdd} />} />
+      <Route path="/" element={<PatientListPage />} />
+      <Route path="/patient/:patientId" element={<PatientDetailPage />} />
+      <Route path="/add-patient" element={<AddPatientPage />} />
     </Routes>
   );
 }
