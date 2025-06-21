@@ -441,9 +441,8 @@ function AddPatientPage() {
   const navigate = useNavigate()
   const [formData, setFormData] = useState({
     name: '',
-    gender: '',
+    gender: '男',
     phone: '',
-    age: '',
     surgeryType: '',
     surgeryDate: '',
     dischargeDate: '',
@@ -451,7 +450,6 @@ function AddPatientPage() {
     inrDate: '',
     dose: '',
     note: '',
-    initial_warfarin_dose: '',
   })
   const [errors, setErrors] = useState<Partial<typeof formData>>({})
 
@@ -471,43 +469,45 @@ function AddPatientPage() {
     if (!formData.inr.trim()) newErrors.inr = 'INR不能为空'
     if (!formData.inrDate.trim()) newErrors.inrDate = 'INR检查时间不能为空'
     if (!formData.dose.trim()) newErrors.dose = '华法林剂量不能为空'
-    if (!formData.initial_warfarin_dose.trim()) newErrors.initial_warfarin_dose = '初始剂量为必填项'
 
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (validate()) {
-      if (window.confirm('确认提交新患者信息吗？')) {
-        try {
-          const response = await fetch('http://localhost:3001/api/patients', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              ...formData,
-              age: Number(formData.age) || null,
-            }),
-          })
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    try {
+      const response = await fetch('http://localhost:3001/api/patients/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: formData.name,
+          gender: formData.gender === '男' ? 'male' : 'female',
+          phone: formData.phone,
+          operation_type: formData.surgeryType,
+          operation_date: formData.surgeryDate,
+          discharge_date: formData.dischargeDate,
+          metric_value: formData.inr,
+          doctor_suggested_dosage: formData.dose,
+        }),
+      });
 
-          const result = await response.json()
+      const result = await response.json();
 
-          if (response.ok && result.success) {
-            alert('患者添加成功!')
-            navigate('/') // 直接跳转，列表页会自己刷新
-          } else {
-            throw new Error(result.message || '提交失败，请检查数据。');
-          }
-        } catch (error: any) {
-          alert(`发生错误: ${error.message}`);
-          // console.error('Submit error:', error);
-        }
+      if (response.ok) {
+        alert('患者注册成功！');
+        // Optionally, reset form or redirect
+        window.location.reload(); // Simple way to reset state
+      } else {
+        throw new Error(result.message || '注册失败');
       }
+    } catch (error: any) {
+      console.error('Submit error:', error);
+      alert(`发生错误: ${error.message}`);
     }
-  }
+  };
 
   return (
     <div className="container">
@@ -526,7 +526,6 @@ function AddPatientPage() {
             <label>INR检查时间<span className="required">*</span> <input name="inrDate" value={formData.inrDate} onChange={handleChange} type="date" /></label>
             <label>华法林剂量<span className="required">*</span> <input name="dose" value={formData.dose} onChange={handleChange} /></label>
             <label>备注 <textarea name="note" value={formData.note} onChange={handleChange} style={{ resize: 'none', height: 60 }} /></label>
-            <label>初始华法林剂量<span className="required">*</span> <input name="initial_warfarin_dose" value={formData.initial_warfarin_dose} onChange={handleChange} /></label>
           </div>
           {Object.entries(errors).map(([fieldName, errorMessage]) => (
             <div key={fieldName} className="form-error">{errorMessage}</div>
