@@ -140,43 +140,43 @@ function Sidebar() {
 }
 
 function PatientListPage() {
-  const navigate = useNavigate()
-  const [patients, setPatients] = useState<any[]>([])
+  const [patients, setPatients] = useState([]);
+  const navigate = useNavigate();
+
+  const fetchPatients = async () => {
+    try {
+      const response = await fetch('http://localhost:3001/api/patients');
+      const data = await response.json();
+      if (data.success) {
+        setPatients(data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching patients:', error);
+    }
+  };
 
   useEffect(() => {
-    const fetchPatients = async () => {
-      try {
-        const response = await fetch('http://localhost:3001/api/patients')
-        if (!response.ok) {
-          throw new Error('Network response was not ok')
-        }
-        const result = await response.json()
-        if (result.success && Array.isArray(result.data)) {
-          const formattedData = result.data.map((p: any) => ({
-            id: p.patient_id || '无ID',
-            name: p.patient_name || '无姓名',
-            phone: p.phone_number || '无手机号',
-            gender: p.gender === 'male' ? '男' : '女',
-            age: calculateAge(p.date_of_birth),
-            surgeryType: p.surgery_type || 'N/A',
-            surgeryDate: p.operation_date || 'N/A',
-            dischargeDate: p.discharge_date || 'N/A',
-            latestINR: 'N/A',
-            testDate: 'N/A',
-            currentDose: 'N/A',
-            suggestedDose: 'N/A',
-          }))
-          setPatients(formattedData)
-        } else {
-          throw new Error(result.message || 'Failed to fetch patients')
-        }
-      } catch (error) {
-        console.error("Failed to fetch patients:", error)
-      }
-    }
+    fetchPatients();
+  }, []);
 
-    fetchPatients()
-  }, [])
+  const handleConfirm = async (planId: string) => {
+    if (!planId || !window.confirm('确认要采纳这条用药建议吗？')) return;
+    try {
+      const response = await fetch(`http://localhost:3001/api/patients/medication-plan/${planId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'active' }),
+      });
+      if (response.ok) {
+        alert('操作成功！');
+        fetchPatients(); // Refresh the list
+      } else {
+        throw new Error('操作失败');
+      }
+    } catch (error: any) {
+      alert(`错误: ${error.message}`);
+    }
+  };
 
   return (
     <div className="container">
@@ -190,41 +190,45 @@ function PatientListPage() {
         <table className="patient-table">
           <thead>
             <tr>
-              <th>用户ID</th>
               <th>姓名</th>
               <th>手机号</th>
               <th>性别</th>
-              <th>年龄</th>
               <th>手术类型</th>
               <th>手术时间</th>
               <th>出院时间</th>
               <th>最新INR</th>
               <th>检验时间</th>
-              <th>当前剂量</th>
-              <th>建议剂量</th>
+              <th>当前剂量(mg)</th>
+              <th>建议剂量(mg)</th>
+              <th>状态</th>
               <th>操作</th>
             </tr>
           </thead>
           <tbody>
-            {patients.map((p) => (
-              <tr key={p.id}>
-                <td>{p.id}</td>
-                <td>{p.name}</td>
-                <td>{p.phone}</td>
-                <td>{p.gender}</td>
-                <td>{p.age}</td>
-                <td>{p.surgeryType}</td>
-                <td>{p.surgeryDate}</td>
-                <td>{p.dischargeDate}</td>
-                <td>{p.latestINR}</td>
-                <td>{p.testDate}</td>
-                <td>{p.currentDose}</td>
-                <td>{p.suggestedDose}</td>
+            {patients.map((p: any) => (
+              <tr key={p.patient_id}>
+                <td>{p.patient_name}</td>
+                <td>{p.phone_number}</td>
+                <td>{p.gender === 'male' ? '男' : '女'}</td>
+                <td>{p.operation_type}</td>
+                <td>{p.operation_date}</td>
+                <td>{p.discharge_date}</td>
+                <td>{p.latest_inr || 'N/A'}</td>
+                <td>{p.latest_inr_date || 'N/A'}</td>
+                <td>{p.current_dose || 'N/A'}</td>
+                <td>{p.suggested_dose || 'N/A'}</td>
                 <td>
-                  <a href="#" style={{ color: '#1677ff' }} onClick={(e) => {
-                    e.preventDefault();
-                    navigate(`/patient/${p.id}`);
-                  }}>查看</a>
+                  <StatusBadge status={p.latest_plan_status} />
+                </td>
+                <td>
+                  {p.latest_plan_status === 'pending' ? (
+                    <>
+                      <button onClick={() => handleConfirm(p.latest_plan_id)}>确认</button>
+                      <button onClick={() => navigate(`/patient/${p.patient_id}`)}>查看</button>
+                    </>
+                  ) : (
+                    <button onClick={() => navigate(`/patient/${p.patient_id}`)}>查看</button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -244,6 +248,7 @@ function PatientDetailPage() {
   // 本地交互状态
   const [editRow, setEditRow] = useState<string | null>(null);
   const [editValues, setEditValues] = useState({ doctorDose: '', note: '' });
+  const [editingPlan, setEditingPlan] = useState<any>(null); // State to track the plan being edited
 
   useEffect(() => {
     if (!patientId) {
@@ -275,6 +280,94 @@ function PatientDetailPage() {
     fetchPatientDetail();
   }, [patientId]);
 
+  const handleEdit = (plan: any) => {
+    setEditingPlan({ ...plan });
+  };
+
+  const handleCancel = () => {
+    setEditingPlan(null);
+  };
+
+  const handleSave = async () => {
+    if (!editingPlan) return;
+
+    if (!window.confirm('您确定要保存此次修改吗？')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`http://localhost:3001/api/patients/medication-plan/${editingPlan.plan_id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 'active', // Saving implies confirmation
+          doctor_suggested_dosage: editingPlan.doctor_suggested_dosage,
+          remarks: editingPlan.remarks,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save medication plan');
+      }
+
+      // Refetch patient data to show the update
+      const updatedPatientResponse = await fetch(`http://localhost:3001/api/patients/${patientId}`);
+      const updatedPatientData = await updatedPatientResponse.json();
+      setPatient(updatedPatientData.data);
+
+      setEditingPlan(null); // Exit editing mode
+    } catch (error) {
+      console.error("Error saving plan:", error);
+      alert("保存失败，请稍后再试。");
+    }
+  };
+
+  const updatePlanStatus = async (planId: string, status: 'active' | 'rejected') => {
+    try {
+      const response = await fetch(`http://localhost:3001/api/patients/medication-plan/${planId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to ${status === 'active' ? 'confirm' : 'reject'} plan`);
+      }
+
+      // Refetch patient data to show the update
+      const updatedPatientResponse = await fetch(`http://localhost:3001/api/patients/${patientId}`);
+      const updatedPatientData = await updatedPatientResponse.json();
+      setPatient(updatedPatientData.data);
+
+    } catch (error) {
+      console.error(`Error updating plan status:`, error);
+      alert("操作失败，请稍后再试。");
+    }
+  };
+
+  const handleConfirm = (planId: string) => {
+    if (window.confirm('确认要采纳这条用药建议吗？')) {
+      updatePlanStatus(planId, 'active');
+    }
+  };
+
+  const handleReject = (planId: string) => {
+    if (window.confirm('确认要拒绝这条用药建议吗？')) {
+      updatePlanStatus(planId, 'rejected');
+    }
+  };
+
+  const handlePlanChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    if (!editingPlan) return;
+    setEditingPlan({
+      ...editingPlan,
+      [e.target.name]: e.target.value,
+    });
+  };
 
   if (loading) {
     return <div>正在加载患者详情...</div>;
@@ -285,37 +378,6 @@ function PatientDetailPage() {
   if (!patient) {
     return <div>未找到该患者的信息</div>;
   }
-
-  // 编辑保存 (TODO: call API)
-  const handleSave = (rowId: string) => {
-    console.log("Saving...", rowId, editValues);
-    setEditRow(null);
-  };
-
-  // 确认 (TODO: call API)
-  const handleConfirm = (rowId: string) => {
-    if (!window.confirm('确认要将此条用药记录设为已确认吗？')) return;
-    // console.log("Confirming...", rowId);
-    setEditRow(null);
-  };
-
-  // 拒绝 (TODO: call API)
-  const handleReject = (rowId: string) => {
-    if (!window.confirm('确认要将此条用药记录设为已拒绝吗？')) return;
-    // console.log("Rejecting...", rowId);
-    setEditRow(null);
-  };
-
-  // 进入编辑
-  const handleEdit = (row: any) => {
-    setEditRow(row.id);
-    setEditValues({ doctorDose: row.doctorDose || '', note: row.note || '' });
-  };
-
-  // 取消编辑
-  const handleCancel = () => {
-    setEditRow(null);
-  };
 
   return (
     <div className="container">
@@ -376,55 +438,68 @@ function PatientDetailPage() {
             <thead>
               <tr>
                 <th>单号</th>
-                <th>华法林当前用量</th>
-                <th>系统建议用量</th>
-                <th>确认状态</th>
+                <th>华法林之前用量</th>
+                <th>最新INR</th>
+                <th>化验时间</th>
+                <th>更新建议用量</th>
                 <th>医生确认用量</th>
+                <th>确认状态</th>
                 <th>备注</th>
-                <th>提报时间</th>
                 <th>操作</th>
               </tr>
             </thead>
             <tbody>
-              {patient.medication_plans && patient.medication_plans.map((r: any) => (
-                <tr key={r.id}>
-                  <td>{r.id}</td>
-                  <td>{r.dose}</td>
-                  <td>{r.sysDose}</td>
+              {patient.medication_plans.map((plan: any) => (
+                <tr key={plan.plan_id}>
+                  <td>{plan.plan_id.slice(0, 8)}</td>
+                  <td>{plan.previous_dosage || '-'}</td>
+                  <td>{plan.inr_value || '-'}</td>
+                  <td>{plan.measurement_date || '-'}</td>
+                  <td>{plan.system_suggested_dosage || '-'}</td>
                   <td>
-                    <StatusBadge status={r.confirmStatus} />
-                  </td>
-                  <td>
-                    {editRow === r.id ? (
-                      <input value={editValues.doctorDose} onChange={e => setEditValues(v => ({ ...v, doctorDose: e.target.value }))} style={{ width: 60 }} />
+                    {editingPlan && editingPlan.plan_id === plan.plan_id ? (
+                      <input
+                        type="text"
+                        name="doctor_suggested_dosage"
+                        value={editingPlan.doctor_suggested_dosage || ''}
+                        onChange={handlePlanChange}
+                        style={{ width: '80px' }}
+                      />
                     ) : (
-                      r.doctorDose
+                      plan.doctor_suggested_dosage || '-'
+                    )}
+                  </td>
+                  <td><StatusBadge status={plan.status} /></td>
+                  <td>
+                    {editingPlan && editingPlan.plan_id === plan.plan_id ? (
+                      <textarea
+                        name="remarks"
+                        value={editingPlan.remarks || ''}
+                        onChange={handlePlanChange}
+                        style={{ width: '120px', height: '40px' }}
+                      />
+                    ) : (
+                      plan.remarks || '-'
                     )}
                   </td>
                   <td>
-                    {editRow === r.id ? (
-                      <input value={editValues.note} onChange={e => setEditValues(v => ({ ...v, note: e.target.value }))} style={{ width: 100 }} />
+                    {editingPlan && editingPlan.plan_id === plan.plan_id ? (
+                      <>
+                        <button onClick={handleSave}>保存</button>
+                        <button onClick={handleCancel}>取消</button>
+                      </>
                     ) : (
-                      r.note
-                    )}
-                  </td>
-                  <td>{r.testDate}</td>
-                  <td>
-                    {r.confirmStatus === 'pending' ? (
-                      editRow === r.id ? (
-                        <>
-                          <a href="#" style={{ color: '#1677ff', marginRight: 8 }} onClick={e => { e.preventDefault(); handleSave(r.id) }}>保存</a>
-                          <a href="#" style={{ color: 'gray' }} onClick={e => { e.preventDefault(); handleCancel() }}>取消</a>
-                        </>
-                      ) : (
-                        <>
-                          <a href="#" style={{ color: '#1677ff', marginRight: 8 }} onClick={e => { e.preventDefault(); handleEdit(r) }}>修改</a>
-                          <a href="#" style={{ color: 'red', marginRight: 8 }} onClick={e => { e.preventDefault(); handleConfirm(r.id) }}>确认</a>
-                          <a href="#" style={{ color: 'gray' }} onClick={e => { e.preventDefault(); handleReject(r.id) }}>拒绝</a>
-                        </>
-                      )
-                    ) : (
-                      '—'
+                      <>
+                        {plan.status === 'pending' ? (
+                          <>
+                            <button onClick={() => handleEdit(plan)}>修改</button>
+                            <button onClick={() => handleConfirm(plan.plan_id)}>确认</button>
+                            <button onClick={() => handleReject(plan.plan_id)}>拒绝</button>
+                          </>
+                        ) : (
+                          '已处理'
+                        )}
+                      </>
                     )}
                   </td>
                 </tr>
@@ -490,7 +565,9 @@ function AddPatientPage() {
           operation_date: formData.surgeryDate,
           discharge_date: formData.dischargeDate,
           metric_value: formData.inr,
+          measurement_time: formData.inrDate,
           doctor_suggested_dosage: formData.dose,
+          remarks: formData.note,
         }),
       });
 
