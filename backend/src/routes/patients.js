@@ -32,6 +32,53 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// Update medication plan status
+router.put('/medication-plan/:planId', async (req, res) => {
+  try {
+    const { planId } = req.params;
+    const { status } = req.body;
+
+    // Validate status
+    if (!status || !['active', 'rejected'].includes(status)) {
+      return res.status(400).json({ success: false, message: 'Invalid status value' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      
+      // Update medication plan status
+      const result = await client.query(
+        `UPDATE medication_plan_tab 
+         SET status = $1, updated_at = CURRENT_TIMESTAMP
+         WHERE plan_id = $2
+         RETURNING *`,
+        [status, planId]
+      );
+
+      if (result.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ success: false, message: 'Medication plan not found' });
+      }
+
+      await client.query('COMMIT');
+      
+      res.json({
+        success: true,
+        data: result.rows[0]
+      });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('Error updating medication plan:', error);
+    res.status(500).json({ success: false, message: 'Error updating medication plan' });
+  }
+});
+
 // Register new patient
 router.post('/register', async (req, res) => {
   try {
