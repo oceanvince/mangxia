@@ -10,23 +10,49 @@ const pool = new Pool({
 
 const getAllPatientProfiles = async () => {
     try {
-        // 这条SQL语句会连接相关的表，获取前端需要的所有信息
-        // 使用 COALESCE 提供默认值，使用 TO_CHAR 统一日期格式
         const query = `
             SELECT
                 p.patient_id,
-                COALESCE(p.name, '无姓名') AS patient_name,
-                COALESCE(a.phone, '无手机号') AS phone_number,
+                p.name AS patient_name,
+                p.phone AS phone_number,
                 p.gender,
-                p.date_of_birth,
-                COALESCE(p.operation_type, 'N/A') AS surgery_type,
+                p.operation_type,
                 TO_CHAR(p.operation_date, 'YYYY-MM-DD') AS operation_date,
-                TO_CHAR(p.discharge_date, 'YYYY-MM-DD') AS discharge_date
+                TO_CHAR(p.discharge_date, 'YYYY-MM-DD') AS discharge_date,
+                lp.latest_inr,
+                lp.latest_inr_date,
+                lp.system_suggested_dosage AS suggested_dose,
+                lp.status AS latest_plan_status,
+                lp.plan_id AS latest_plan_id,
+                CASE
+                    WHEN lp.status = 'pending' THEN lp.previous_dosage
+                    ELSE lp.doctor_suggested_dosage
+                END AS current_dose
             FROM
                 patient_profile_tab p
-            LEFT JOIN
-                account_tab a ON p.account_id = a.account_id
+            LEFT JOIN (
+                WITH ranked_plans AS (
+                    SELECT
+                        mp.patient_id,
+                        mp.plan_id,
+                        mp.status,
+                        mp.previous_dosage,
+                        mp.doctor_suggested_dosage,
+                        mp.system_suggested_dosage,
+                        hm.metric_value AS latest_inr,
+                        hm.measured_at,
+                        TO_CHAR(hm.measured_at, 'YYYY-MM-DD') AS latest_inr_date,
+                        ROW_NUMBER() OVER(PARTITION BY mp.patient_id ORDER BY (mp.status = 'pending') DESC, hm.measured_at DESC) as rn
+                    FROM
+                        medication_plan_tab mp
+                    LEFT JOIN
+                        health_metrics_tab hm ON mp.metric_id = hm.metric_id
+                )
+                SELECT * FROM ranked_plans WHERE rn = 1
+            ) AS lp ON p.patient_id = lp.patient_id
             ORDER BY
+                (lp.status = 'pending') DESC,
+                lp.measured_at DESC NULLS LAST,
                 p.created_at DESC;
         `;
         const { rows } = await pool.query(query);
@@ -44,7 +70,7 @@ const getPatientProfileById = async (patientId) => {
             SELECT
                 p.patient_id,
                 COALESCE(p.name, '无姓名') AS patient_name,
-                COALESCE(a.phone, '无手机号') AS phone_number,
+                COALESCE(p.phone, '无手机号') AS phone_number,
                 p.gender,
                 p.date_of_birth,
                 COALESCE(p.operation_type, 'N/A') AS surgery_type,
@@ -54,8 +80,6 @@ const getPatientProfileById = async (patientId) => {
                 COALESCE(d.hospital, 'N/A') AS doctor_hospital
             FROM
                 patient_profile_tab p
-            LEFT JOIN
-                account_tab a ON p.account_id = a.account_id
             LEFT JOIN
                 doctor_profile_tab d ON p.primary_doctor_id = d.doctor_id
             WHERE
@@ -72,19 +96,23 @@ const getPatientProfileById = async (patientId) => {
         // 子查询，获取该患者的用药记录
         const medicationQuery = `
             SELECT
-                plan_id AS id,
-                previous_dosage AS dose,
-                system_suggested_dosage AS "sysDose",
-                doctor_suggested_dosage AS "doctorDose",
-                remarks AS note,
-                status AS "confirmStatus",
-                TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI:SS') AS "testDate"
+                mp.plan_id,
+                mp.system_suggested_dosage,
+                mp.doctor_suggested_dosage,
+                mp.previous_dosage,
+                mp.remarks,
+                mp.status,
+                TO_CHAR(mp.created_at, 'YYYY-MM-DD HH24:MI:SS') AS created_at,
+                hm.metric_value AS inr_value,
+                TO_CHAR(hm.measured_at, 'YYYY-MM-DD') AS measurement_date
             FROM
-                medication_plan_tab
+                medication_plan_tab mp
+            LEFT JOIN
+                health_metrics_tab hm ON mp.metric_id = hm.metric_id
             WHERE
-                patient_id = $1
+                mp.patient_id = $1
             ORDER BY
-                created_at DESC;
+                mp.created_at DESC;
         `;
         const { rows: medicationRows } = await pool.query(medicationQuery, [patientId]);
         
@@ -120,7 +148,19 @@ const getPatientProfileById = async (patientId) => {
     }
 };
 
+const calculateSystemDosage = (lastConfirmedDose, newINR) => {
+    let newDosage = lastConfirmedDose;
+    if (newINR > 1.8) {
+        newDosage -= 0.25;
+    } else if (newINR < 1.5) {
+        newDosage += 0.25;
+    }
+    // Ensure dosage does not go below a certain threshold, e.g., 0.
+    return Math.max(0, newDosage);
+};
+
 module.exports = {
     getAllPatientProfiles,
-    getPatientProfileById
+    getPatientProfileById,
+    calculateSystemDosage,
 }; 

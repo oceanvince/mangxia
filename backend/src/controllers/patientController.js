@@ -72,7 +72,9 @@ const registerPatient = async (req, res) => {
         operation_date,
         discharge_date,
         metric_value,
-        doctor_suggested_dosage
+        doctor_suggested_dosage,
+        remarks,
+        measurement_time,
     } = req.body;
 
     // Validate input
@@ -109,8 +111,8 @@ const registerPatient = async (req, res) => {
         const metricResult = await client.query(
             `INSERT INTO health_metrics_tab 
              (patient_id, metric_type, metric_value, measured_at) 
-             VALUES ($1, $2, $3, CURRENT_TIMESTAMP) RETURNING metric_id`,
-            [patientId, 'INR', metric_value]
+             VALUES ($1, $2, $3, $4) RETURNING metric_id`,
+            [patientId, 'INR', metric_value, measurement_time || new Date()]
         );
         
         const metricId = metricResult.rows[0].metric_id;
@@ -118,9 +120,9 @@ const registerPatient = async (req, res) => {
         // 4. Create medication plan
         await client.query(
             `INSERT INTO medication_plan_tab 
-             (patient_id, metric_id, medication_name, doctor_suggested_dosage, status) 
-             VALUES ($1, $2, $3, $4, $5)`,
-            [patientId, metricId, '华法林', doctor_suggested_dosage, 'active']
+             (patient_id, metric_id, medication_name, doctor_suggested_dosage, status, remarks) 
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [patientId, metricId, '华法林', doctor_suggested_dosage, 'active', remarks]
         );
         
         await client.query('COMMIT');
@@ -152,7 +154,7 @@ const updateMedicationPlan = async (req, res) => {
     
     try {
         const { planId } = req.params;
-        const { status, doctorSuggestedDosage, remarks } = req.body;
+        const { status, doctor_suggested_dosage, remarks } = req.body;
         
         // Validate status
         if (!['active', 'rejected'].includes(status)) {
@@ -179,7 +181,7 @@ const updateMedicationPlan = async (req, res) => {
 
         // If no doctor dosage provided and status is active, use system suggested dosage
         const finalDoctorDosage = status === 'active' 
-            ? (doctorSuggestedDosage || currentPlan.rows[0].system_suggested_dosage)
+            ? (doctor_suggested_dosage || currentPlan.rows[0].system_suggested_dosage)
             : currentPlan.rows[0].doctor_suggested_dosage;
 
         // Update the plan
@@ -213,9 +215,67 @@ const updateMedicationPlan = async (req, res) => {
     }
 };
 
+const addHealthMetricAndPlan = async (req, res) => {
+    const { patientId } = req.params;
+    const { metric_type, metric_value } = req.body; // e.g., 'INR', 1.9
+
+    if (!metric_type || !metric_value) {
+        return res.status(400).json({ message: 'Missing metric_type or metric_value' });
+    }
+
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        // 1. Get the last confirmed dose for the patient
+        const lastActiveDoseQuery = `
+            SELECT doctor_suggested_dosage
+            FROM medication_plan_tab
+            WHERE patient_id = $1 AND status = 'active'
+            ORDER BY created_at DESC LIMIT 1
+        `;
+        const lastActiveDoseResult = await client.query(lastActiveDoseQuery, [patientId]);
+        
+        // This could be null if the patient is new and has no active plan yet.
+        // We need a fallback. Let's assume initial dose is stored somewhere or use a default.
+        // For now, let's say the initial dose is retrieved from patient_profile_tab
+        // or we use a default of 1 if not found.
+        const lastConfirmedDose = lastActiveDoseResult.rows[0]?.doctor_suggested_dosage || 1; 
+
+        // 2. Calculate the new system suggested dosage
+        const system_suggested_dosage = patientService.calculateSystemDosage(parseFloat(lastConfirmedDose), parseFloat(metric_value));
+
+        // 3. Add the new health metric
+        const metricResult = await client.query(
+            `INSERT INTO health_metrics_tab (patient_id, metric_type, metric_value, measured_at)
+             VALUES ($1, $2, $3, CURRENT_TIMESTAMP) RETURNING metric_id`,
+            [patientId, metric_type, metric_value]
+        );
+        const metricId = metricResult.rows[0].metric_id;
+
+        // 4. Create a new medication plan with the suggestion
+        await client.query(
+            `INSERT INTO medication_plan_tab (patient_id, metric_id, medication_name, system_suggested_dosage, status)
+             VALUES ($1, $2, $3, $4, 'pending')`,
+            [patientId, metricId, '华法林', system_suggested_dosage]
+        );
+
+        await client.query('COMMIT');
+        res.status(201).json({ success: true, message: 'Health metric and new plan added successfully.' });
+
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Error adding health metric and plan:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    } finally {
+        client.release();
+    }
+};
+
 module.exports = {
     getAllPatients,
     getPatientById,
     registerPatient,
-    updateMedicationPlan
+    updateMedicationPlan,
+    addHealthMetricAndPlan,
 }; 

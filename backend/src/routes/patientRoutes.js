@@ -30,4 +30,11 @@ router.post('/register', patientController.registerPatient);
  */
 router.put('/medication-plan/:planId', patientController.updateMedicationPlan);
 
+/**
+ * @route POST /api/patients/:patientId/metrics
+ * @description Add a new health metric for a patient, which triggers the creation of a new pending medication plan with a system-suggested dosage.
+ * @access Private (for now, ideally should be accessible by the miniprogram service)
+ */
+router.post('/:patientId/metrics', patientController.addHealthMetricAndPlan);
+
 module.exports = router; 
