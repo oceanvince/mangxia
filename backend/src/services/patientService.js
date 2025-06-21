@@ -10,84 +10,113 @@ const pool = new Pool({
 
 const getAllPatientProfiles = async () => {
     try {
+        // 这条SQL语句会连接相关的表，获取前端需要的所有信息
+        // 使用 COALESCE 提供默认值，使用 TO_CHAR 统一日期格式
         const query = `
-            SELECT 
-                pp.*,
-                hm.metric_type,
-                hm.metric_value,
-                hm.unit,
-                hm.measured_at,
-                mp.medication_name,
-                mp.previous_dosage,
-                mp.system_suggested_dosage,
-                mp.doctor_suggested_dosage,
-                mp.status as medication_status
-            FROM patient_profile_tab pp
-            LEFT JOIN LATERAL (
-                SELECT * FROM health_metrics_tab hm
-                WHERE hm.patient_id = pp.patient_id
-                ORDER BY hm.measured_at DESC
-                LIMIT 1
-            ) hm ON true
-            LEFT JOIN LATERAL (
-                SELECT * FROM medication_plan_tab mp
-                WHERE mp.patient_id = pp.patient_id
-                ORDER BY mp.created_at DESC
-                LIMIT 1
-            ) mp ON true
-            ORDER BY pp.created_at DESC
+            SELECT
+                p.patient_id,
+                COALESCE(p.name, '无姓名') AS patient_name,
+                COALESCE(a.phone, '无手机号') AS phone_number,
+                p.gender,
+                p.date_of_birth,
+                COALESCE(p.operation_type, 'N/A') AS surgery_type,
+                TO_CHAR(p.operation_date, 'YYYY-MM-DD') AS operation_date,
+                TO_CHAR(p.discharge_date, 'YYYY-MM-DD') AS discharge_date
+            FROM
+                patient_profile_tab p
+            LEFT JOIN
+                account_tab a ON p.account_id = a.account_id
+            ORDER BY
+                p.created_at DESC;
         `;
-        
-        const result = await pool.query(query);
-        return {
-            success: true,
-            data: result.rows
-        };
+        const { rows } = await pool.query(query);
+        return { success: true, data: rows };
     } catch (error) {
         console.error('Error fetching patient profiles:', error);
-        return {
-            success: false,
-            error: 'Failed to fetch patient profiles'
-        };
+        return { success: false, error: 'Database error' };
     }
 };
 
 const getPatientProfileById = async (patientId) => {
     try {
-        const query = `
-            SELECT 
-                pp.*,
-                dp.name as doctor_name,
-                dp.hospital as doctor_hospital,
-                dp.department as doctor_department,
-                json_agg(DISTINCT mp.*) as medication_plans,
-                json_agg(DISTINCT hm.*) as health_metrics
-            FROM patient_profile_tab pp
-            LEFT JOIN doctor_profile_tab dp ON pp.primary_doctor_id = dp.doctor_id
-            LEFT JOIN medication_plan_tab mp ON pp.patient_id = mp.patient_id
-            LEFT JOIN health_metrics_tab hm ON pp.patient_id = hm.patient_id
-            WHERE pp.patient_id = $1
-            GROUP BY pp.patient_id, dp.doctor_id
+        // 主查询，获取患者基本信息
+        const patientQuery = `
+            SELECT
+                p.patient_id,
+                COALESCE(p.name, '无姓名') AS patient_name,
+                COALESCE(a.phone, '无手机号') AS phone_number,
+                p.gender,
+                p.date_of_birth,
+                COALESCE(p.operation_type, 'N/A') AS surgery_type,
+                TO_CHAR(p.operation_date, 'YYYY-MM-DD') AS operation_date,
+                TO_CHAR(p.discharge_date, 'YYYY-MM-DD') AS discharge_date,
+                COALESCE(d.name, '未分配') AS doctor_name,
+                COALESCE(d.hospital, 'N/A') AS doctor_hospital
+            FROM
+                patient_profile_tab p
+            LEFT JOIN
+                account_tab a ON p.account_id = a.account_id
+            LEFT JOIN
+                doctor_profile_tab d ON p.primary_doctor_id = d.doctor_id
+            WHERE
+                p.patient_id = $1;
         `;
-        
-        const result = await pool.query(query, [patientId]);
-        if (result.rows.length === 0) {
-            return {
-                success: false,
-                error: 'Patient not found'
-            };
+        const { rows: patientRows } = await pool.query(patientQuery, [patientId]);
+
+        if (patientRows.length === 0) {
+            return { success: false, error: 'Patient not found' };
         }
+
+        const patientProfile = patientRows[0];
+
+        // 子查询，获取该患者的用药记录
+        const medicationQuery = `
+            SELECT
+                plan_id AS id,
+                previous_dosage AS dose,
+                system_suggested_dosage AS "sysDose",
+                doctor_suggested_dosage AS "doctorDose",
+                remarks AS note,
+                status AS "confirmStatus",
+                TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI:SS') AS "testDate"
+            FROM
+                medication_plan_tab
+            WHERE
+                patient_id = $1
+            ORDER BY
+                created_at DESC;
+        `;
+        const { rows: medicationRows } = await pool.query(medicationQuery, [patientId]);
         
-        return {
-            success: true,
-            data: result.rows[0]
+        // 子查询，获取健康指标（例如INR）
+        const healthMetricsQuery = `
+             SELECT 
+                metric_id as id,
+                metric_type,
+                metric_value,
+                unit,
+                TO_CHAR(measured_at, 'YYYY-MM-DD HH24:MI:SS') as measured_at
+             FROM 
+                health_metrics_tab
+             WHERE 
+                patient_id = $1
+             ORDER BY
+                measured_at DESC;
+        `;
+        const { rows: healthMetricsRows } = await pool.query(healthMetricsQuery, [patientId]);
+
+
+        // 组合最终返回的数据
+        const result = {
+            ...patientProfile,
+            medication_plans: medicationRows,
+            health_metrics: healthMetricsRows,
         };
+        
+        return { success: true, data: result };
     } catch (error) {
-        console.error('Error fetching patient profile:', error);
-        return {
-            success: false,
-            error: 'Failed to fetch patient profile'
-        };
+        console.error(`Error fetching patient profile by id ${patientId}:`, error);
+        return { success: false, error: 'Database error' };
     }
 };
 

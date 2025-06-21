@@ -1,6 +1,6 @@
 import './App.css'
 import { Routes, Route, useNavigate, useParams, useLocation } from 'react-router-dom'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 // 模拟患者数据
 const mockPatients = [
@@ -116,8 +116,87 @@ function Sidebar() {
   )
 }
 
-function PatientListPage({ patients, onConfirm }: { patients: any[], onConfirm: (id: string) => void }) {
+function PatientListPage({ patients, setPatients }: { patients: any[], setPatients: (patients: any[]) => void }) {
   const navigate = useNavigate()
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchPatients = async () => {
+      try {
+        const response = await fetch('http://localhost:3001/api/patients');
+        if (!response.ok) {
+          throw new Error('Network response was not ok');
+        }
+        const result = await response.json();
+        if (result.success && Array.isArray(result.data)) {
+          // 将后端数据结构映射到前端所需的结构
+          const formattedData = result.data.map((p: any) => {
+            // 安全地格式化日期，只取年月日
+            const formatDate = (dateString: string | null) => {
+              if (!dateString) return 'N/A';
+              try {
+                return new Date(dateString).toISOString().split('T')[0];
+              } catch (e) {
+                return '日期无效';
+              }
+            };
+
+            // 从生日计算年龄
+            const calculateAge = (dob: string | null) => {
+              if (!dob) return 'N/A';
+              try {
+                const birthDate = new Date(dob);
+                const today = new Date();
+                let age = today.getFullYear() - birthDate.getFullYear();
+                const m = today.getMonth() - birthDate.getMonth();
+                if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+                  age--;
+                }
+                return age;
+              } catch (e) {
+                return 'N/A';
+              }
+            };
+
+            return {
+              id: p.patient_id || '无ID',
+              name: p.patient_name || '无姓名',
+              phone: p.phone_number || '无手机号',
+              gender: p.gender === 'male' ? '男' : p.gender === 'female' ? '女' : '未知',
+              age: calculateAge(p.date_of_birth),
+              surgeryType: p.surgery_type || 'N/A',
+              surgeryDate: formatDate(p.operation_date),
+              dischargeDate: formatDate(p.discharge_date),
+              // --- 以下字段在列表API中暂不提供，给予默认值 ---
+              latestINR: 'N/A',
+              testDate: 'N/A',
+              currentDose: 'N/A',
+              suggestedDose: 'N/A',
+              status: '已确认', // 列表页默认为已确认
+            };
+          });
+          setPatients(formattedData);
+        } else {
+          throw new Error('Invalid data format from API');
+        }
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPatients();
+  }, [setPatients]);
+
+  if (loading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error}</div>;
+  
+  const handleConfirm = (id: string) => {
+    // ... (this will need API call later)
+  };
+
   return (
     <div className="container">
       <Sidebar />
@@ -166,7 +245,7 @@ function PatientListPage({ patients, onConfirm }: { patients: any[], onConfirm: 
                     <a
                       href="#"
                       style={{ color: 'red' }}
-                      onClick={e => { e.preventDefault(); onConfirm(p.id); }}
+                      onClick={e => { e.preventDefault(); handleConfirm(p.id); }}
                     >
                       确认
                     </a>
@@ -459,26 +538,23 @@ function AddPatientPage({ onAdd }: { onAdd: (patient: any) => void }) {
 }
 
 function App() {
-  const [patients, setPatients] = useState(
-    [...mockPatients].sort((a, b) => b.testDate.localeCompare(a.testDate))
-  )
+  const [patients, setPatients] = useState<any[]>([]);
+
   const handleConfirm = (id: string) => {
-    setPatients((prev) =>
-      prev.map((p) =>
-        p.id === id ? { ...p, status: '已确认' } : p
-      )
-    )
-  }
+    // ... (this will need API call later)
+  };
+
   const handleAdd = (patient: any) => {
-    setPatients(prev => [patient, ...prev])
-  }
+    // ... (this will need API call later)
+  };
+
   return (
     <Routes>
-      <Route path="/" element={<PatientListPage patients={patients} onConfirm={handleConfirm} />} />
+      <Route path="/" element={<PatientListPage patients={patients} setPatients={setPatients} />} />
       <Route path="/patient/:id" element={<PatientDetailPage />} />
       <Route path="/add" element={<AddPatientPage onAdd={handleAdd} />} />
     </Routes>
-  )
+  );
 }
 
 export default App
