@@ -45,6 +45,7 @@ CREATE TABLE patient_profile_tab (
     account_id UUID UNIQUE REFERENCES account_tab(account_id) ON DELETE CASCADE,
     primary_doctor_id UUID REFERENCES doctor_profile_tab(doctor_id),
     name TEXT NOT NULL,
+    phone VARCHAR(20),
     gender gender_type,
     date_of_birth DATE,
     operation_type TEXT,

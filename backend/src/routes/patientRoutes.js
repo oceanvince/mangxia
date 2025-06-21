@@ -16,4 +16,11 @@ router.get('/', patientController.getAllPatients);
  */
 router.get('/:patientId', patientController.getPatientById);
 
+/**
+ * @route POST /api/patients/register
+ * @description Register a new patient with health metrics and medication plan
+ * @access Private
+ */
+router.post('/register', patientController.registerPatient);
+
 module.exports = router; 
