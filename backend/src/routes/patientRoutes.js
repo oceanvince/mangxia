@@ -23,4 +23,11 @@ router.get('/:patientId', patientController.getPatientById);
  */
 router.post('/register', patientController.registerPatient);
 
+/**
+ * @route PUT /api/patients/medication-plan/:planId
+ * @description Confirm or reject a medication plan and update doctor suggested dosage
+ * @access Private (Admin/Doctor only)
+ */
+router.put('/medication-plan/:planId', patientController.updateMedicationPlan);
+
 module.exports = router; 

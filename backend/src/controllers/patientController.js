@@ -126,8 +126,79 @@ const registerPatient = async (req, res) => {
     }
 };
 
+/**
+ * Update medication plan status and doctor suggested dosage
+ * @param {Request} req 
+ * @param {Response} res 
+ */
+const updateMedicationPlan = async (req, res) => {
+    const client = await pool.connect();
+    
+    try {
+        const { planId } = req.params;
+        const { status, doctorSuggestedDosage } = req.body;
+        
+        // Validate status
+        if (!['active', 'rejected'].includes(status)) {
+            return res.status(400).json({
+                message: 'Invalid status. Must be either "active" or "rejected"'
+            });
+        }
+
+        await client.query('BEGIN');
+
+        // Get current plan details
+        const currentPlan = await client.query(
+            `SELECT system_suggested_dosage, doctor_suggested_dosage 
+             FROM medication_plan_tab 
+             WHERE plan_id = $1`,
+            [planId]
+        );
+
+        if (currentPlan.rows.length === 0) {
+            return res.status(404).json({
+                message: 'Medication plan not found'
+            });
+        }
+
+        // If no doctor dosage provided and status is active, use system suggested dosage
+        const finalDoctorDosage = status === 'active' 
+            ? (doctorSuggestedDosage || currentPlan.rows[0].system_suggested_dosage)
+            : currentPlan.rows[0].doctor_suggested_dosage;
+
+        // Update the plan
+        const result = await client.query(
+            `UPDATE medication_plan_tab 
+             SET status = $1, 
+                 doctor_suggested_dosage = $2,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE plan_id = $3
+             RETURNING *`,
+            [status, finalDoctorDosage, planId]
+        );
+
+        await client.query('COMMIT');
+
+        res.json({
+            message: `Medication plan ${status === 'active' ? 'confirmed' : 'rejected'} successfully`,
+            plan: result.rows[0]
+        });
+
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Error in updateMedicationPlan:', error);
+        res.status(500).json({
+            message: 'Error updating medication plan',
+            error: error.message
+        });
+    } finally {
+        client.release();
+    }
+};
+
 module.exports = {
     getAllPatients,
     getPatientById,
-    registerPatient
+    registerPatient,
+    updateMedicationPlan
 }; 
