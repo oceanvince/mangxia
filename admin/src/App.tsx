@@ -159,13 +159,16 @@ function PatientListPage() {
     fetchPatients();
   }, []);
 
-  const handleConfirm = async (planId: string) => {
+  const handleConfirm = async (planId: string, systemSuggestedDose: string) => {
     if (!planId || !window.confirm('确认要采纳这条用药建议吗？')) return;
     try {
       const response = await fetch(`http://localhost:3001/api/patients/medication-plan/${planId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'active' }),
+        body: JSON.stringify({ 
+          status: 'active',
+          doctor_suggested_dosage: systemSuggestedDose 
+        }),
       });
       if (response.ok) {
         alert('操作成功！');
@@ -223,7 +226,7 @@ function PatientListPage() {
                 <td>
                   {p.latest_plan_status === 'pending' ? (
                     <>
-                      <button onClick={() => handleConfirm(p.latest_plan_id)}>确认</button>
+                      <button onClick={() => handleConfirm(p.latest_plan_id, p.suggested_dose)}>确认</button>
                       <button onClick={() => navigate(`/patient/${p.patient_id}`)}>查看</button>
                     </>
                   ) : (
@@ -324,14 +327,19 @@ function PatientDetailPage() {
     }
   };
 
-  const updatePlanStatus = async (planId: string, status: 'active' | 'rejected') => {
+  const updatePlanStatus = async (planId: string, status: 'active' | 'rejected', systemSuggestedDosage?: number) => {
     try {
       const response = await fetch(`http://localhost:3001/api/patients/medication-plan/${planId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ 
+          status,
+          ...(status === 'active' && systemSuggestedDosage !== undefined && {
+            doctor_suggested_dosage: systemSuggestedDosage
+          })
+        }),
       });
 
       if (!response.ok) {
@@ -349,9 +357,9 @@ function PatientDetailPage() {
     }
   };
 
-  const handleConfirm = (planId: string) => {
+  const handleConfirm = (planId: string, plan: any) => {
     if (window.confirm('确认要采纳这条用药建议吗？')) {
-      updatePlanStatus(planId, 'active');
+      updatePlanStatus(planId, 'active', plan.system_suggested_dosage);
     }
   };
 
@@ -493,7 +501,7 @@ function PatientDetailPage() {
                         {plan.status === 'pending' ? (
                           <>
                             <button onClick={() => handleEdit(plan)}>修改</button>
-                            <button onClick={() => handleConfirm(plan.plan_id)}>确认</button>
+                            <button onClick={() => handleConfirm(plan.plan_id, plan)}>确认</button>
                             <button onClick={() => handleReject(plan.plan_id)}>拒绝</button>
                           </>
                         ) : (
