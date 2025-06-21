@@ -1,27 +1,18 @@
 const express = require('express');
 const router = express.Router();
+const patientService = require('../services/patientService');
+const { pool } = require('../db');
 
 // Get all patients
 router.get('/', async (req, res) => {
   try {
-    // TODO: Replace with actual database query
-    const dummyPatients = [
-      {
-        id: 1,
-        name: 'John Doe',
-        age: 32,
-        lastVisit: '2024-03-15'
-      },
-      {
-        id: 2,
-        name: 'Jane Smith',
-        age: 28,
-        lastVisit: '2024-03-10'
-      }
-    ];
-
-    res.json({ success: true, data: dummyPatients });
+    const result = await patientService.getAllPatientProfiles();
+    if (!result.success) {
+      return res.status(500).json({ success: false, message: result.error });
+    }
+    res.json(result);
   } catch (error) {
+    console.error('Error fetching patients:', error);
     res.status(500).json({ success: false, message: 'Error fetching patients' });
   }
 });
@@ -30,17 +21,13 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    // TODO: Replace with actual database query
-    const dummyPatient = {
-      id: parseInt(id),
-      name: 'John Doe',
-      age: 32,
-      lastVisit: '2024-03-15',
-      medicalHistory: 'Sample medical history'
-    };
-
-    res.json({ success: true, data: dummyPatient });
+    const result = await patientService.getPatientProfileById(id);
+    if (!result.success) {
+      return res.status(404).json({ success: false, message: result.error });
+    }
+    res.json(result);
   } catch (error) {
+    console.error('Error fetching patient:', error);
     res.status(500).json({ success: false, message: 'Error fetching patient' });
   }
 });
@@ -59,28 +46,65 @@ router.post('/register', async (req, res) => {
       doctor_suggested_dosage,
     } = req.body;
 
-    // TODO: Add validation here
+    // Validate required fields
     if (!name || !gender || !phone || !operation_type || !operation_date || !discharge_date || !metric_value || !doctor_suggested_dosage) {
       return res.status(400).json({ success: false, message: 'Missing required fields' });
     }
 
-    // TODO: Replace with actual database insertion
-    const dummyResponse = {
-      success: true,
-      data: {
-        patient_id: Math.floor(Math.random() * 1000000).toString().padStart(6, '0'),
-        patient_name: name,
-        gender: gender,
-        phone_number: phone,
-        surgery_type: operation_type,
-        operation_date: operation_date,
-        discharge_date: discharge_date,
-        metric_value: metric_value,
-        doctor_suggested_dosage: doctor_suggested_dosage,
-      }
-    };
-
-    res.status(201).json(dummyResponse);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      
+      // Create patient profile
+      const patientResult = await client.query(
+        `INSERT INTO patient_profile_tab 
+         (name, gender, phone, operation_type, operation_date, discharge_date) 
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING patient_id`,
+        [name, gender, phone, operation_type, operation_date, discharge_date]
+      );
+      
+      const patientId = patientResult.rows[0].patient_id;
+      
+      // Add health metric (INR)
+      const metricResult = await client.query(
+        `INSERT INTO health_metrics_tab 
+         (patient_id, metric_type, metric_value, measured_at) 
+         VALUES ($1, $2, $3, CURRENT_TIMESTAMP) RETURNING metric_id`,
+        [patientId, 'INR', metric_value]
+      );
+      
+      const metricId = metricResult.rows[0].metric_id;
+      
+      // Create medication plan
+      await client.query(
+        `INSERT INTO medication_plan_tab 
+         (patient_id, metric_id, medication_name, doctor_suggested_dosage, status) 
+         VALUES ($1, $2, $3, $4, $5)`,
+        [patientId, metricId, '华法林', doctor_suggested_dosage, 'active']
+      );
+      
+      await client.query('COMMIT');
+      
+      res.status(201).json({
+        success: true,
+        data: {
+          patient_id: patientId,
+          patient_name: name,
+          gender: gender,
+          phone_number: phone,
+          operation_type: operation_type,
+          operation_date: operation_date,
+          discharge_date: discharge_date,
+          metric_value: metric_value,
+          doctor_suggested_dosage: doctor_suggested_dosage,
+        }
+      });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   } catch (error) {
     console.error('Registration error:', error);
     res.status(500).json({ success: false, message: 'Error registering patient' });
