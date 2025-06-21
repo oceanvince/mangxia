@@ -152,7 +152,7 @@ const updateMedicationPlan = async (req, res) => {
     
     try {
         const { planId } = req.params;
-        const { status, doctorSuggestedDosage } = req.body;
+        const { status, doctorSuggestedDosage, remarks } = req.body;
         
         // Validate status
         if (!['active', 'rejected'].includes(status)) {
@@ -187,10 +187,11 @@ const updateMedicationPlan = async (req, res) => {
             `UPDATE medication_plan_tab 
              SET status = $1, 
                  doctor_suggested_dosage = $2,
+                 remarks = $3,
                  updated_at = CURRENT_TIMESTAMP
-             WHERE plan_id = $3
+             WHERE plan_id = $4
              RETURNING *`,
-            [status, finalDoctorDosage, planId]
+            [status, finalDoctorDosage, remarks, planId]
         );
 
         await client.query('COMMIT');
