@@ -47,6 +47,8 @@ const getAllPatientProfiles = async () => {
                         medication_plan_tab mp
                     LEFT JOIN
                         health_metrics_tab hm ON mp.metric_id = hm.metric_id
+                    WHERE
+                        mp.status IN ('pending', 'active')
                 )
                 SELECT * FROM ranked_plans WHERE rn = 1
             ) AS lp ON p.patient_id = lp.patient_id
