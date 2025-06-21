@@ -263,67 +263,103 @@ function PatientListPage({ patients, setPatients }: { patients: any[], setPatien
 }
 
 function PatientDetailPage() {
-  const { id } = useParams()
-  const [patients, setPatients] = useState(mockPatients)
-  const patient = patients.find(p => p.id === id)
-  const [editRow, setEditRow] = useState<string | null>(null)
-  const [editValues, setEditValues] = useState<{ doctorDose: string; note: string }>({ doctorDose: '', note: '' })
+  const { id } = useParams<{ id: string }>();
+  const [patient, setPatient] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
+  // 本地交互状态
+  const [editRow, setEditRow] = useState<string | null>(null);
+  const [editValues, setEditValues] = useState({ doctorDose: '', note: '' });
+
+  useEffect(() => {
+    if (!id) {
+      setError('No patient ID provided');
+      setLoading(false);
+      return;
+    }
+
+    const fetchPatientDetail = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch(`http://localhost:3001/api/patients/${id}`);
+        if (!response.ok) {
+          throw new Error(`Network response was not ok (${response.status})`);
+        }
+        const result = await response.json();
+        if (result.success) {
+          setPatient(result.data);
+        } else {
+          throw new Error(result.message || 'Failed to fetch patient details');
+        }
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPatientDetail();
+  }, [id]);
+
+
+  if (loading) {
+    return <div>正在加载患者详情...</div>;
+  }
+  if (error) {
+    return <div>加载出错: {error}</div>;
+  }
   if (!patient) {
-    return <div>未找到该患者</div>
+    return <div>未找到该患者的信息</div>;
   }
 
-  // 编辑保存
+  // 计算年龄的辅助函数
+  const calculateAge = (dob: string | null) => {
+    if (!dob) return 'N/A';
+    try {
+      const birthDate = new Date(dob);
+      const today = new Date();
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const m = today.getMonth() - birthDate.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+      return age;
+    } catch (e) {
+      return 'N/A';
+    }
+  };
+
+  // 编辑保存 (TODO: call API)
   const handleSave = (rowId: string) => {
-    setPatients(prev => prev.map(p =>
-      p.id === patient.id ? {
-        ...p,
-        records: p.records.map((r: any) =>
-          r.id === rowId ? { ...r, doctorDose: editValues.doctorDose, note: editValues.note } : r
-        )
-      } : p
-    ))
-    setEditRow(null)
-  }
+    console.log("Saving...", rowId, editValues);
+    setEditRow(null);
+  };
 
-  // 确认
+  // 确认 (TODO: call API)
   const handleConfirm = (rowId: string) => {
-    if (!window.confirm('确认要将此条用药记录设为已确认吗？')) return
-    setPatients(prev => prev.map(p =>
-      p.id === patient.id ? {
-        ...p,
-        records: p.records.map((r: any) =>
-          r.id === rowId ? { ...r, confirmStatus: '已确认' } : r
-        )
-      } : p
-    ))
-    setEditRow(null)
-  }
+    if (!window.confirm('确认要将此条用药记录设为已确认吗？')) return;
+    // console.log("Confirming...", rowId);
+    setEditRow(null);
+  };
 
-  // 拒绝
+  // 拒绝 (TODO: call API)
   const handleReject = (rowId: string) => {
-    if (!window.confirm('确认要将此条用药记录设为已拒绝吗？')) return
-    setPatients(prev => prev.map(p =>
-      p.id === patient.id ? {
-        ...p,
-        records: p.records.map((r: any) =>
-          r.id === rowId ? { ...r, confirmStatus: '已拒绝' } : r
-        )
-      } : p
-    ))
-    setEditRow(null)
-  }
+    if (!window.confirm('确认要将此条用药记录设为已拒绝吗？')) return;
+    // console.log("Rejecting...", rowId);
+    setEditRow(null);
+  };
 
   // 进入编辑
   const handleEdit = (row: any) => {
-    setEditRow(row.id)
-    setEditValues({ doctorDose: row.doctorDose || '', note: row.note || '' })
-  }
+    setEditRow(row.id);
+    setEditValues({ doctorDose: row.doctorDose || '', note: row.note || '' });
+  };
 
   // 取消编辑
   const handleCancel = () => {
-    setEditRow(null)
-  }
+    setEditRow(null);
+  };
 
   return (
     <div className="container">
@@ -340,15 +376,19 @@ function PatientDetailPage() {
                 <th>手机号</th>
                 <th>性别</th>
                 <th>年龄</th>
+                <th>主管医生</th>
+                <th>所属医院</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td>{patient.id}</td>
-                <td>{patient.name}</td>
-                <td>{patient.phone}</td>
-                <td>{patient.gender}</td>
-                <td>{patient.age}</td>
+                <td>{patient.patient_id}</td>
+                <td>{patient.patient_name}</td>
+                <td>{patient.phone_number}</td>
+                <td>{patient.gender === 'male' ? '男' : '女'}</td>
+                <td>{calculateAge(patient.date_of_birth)}</td>
+                <td>{patient.doctor_name}</td>
+                <td>{patient.doctor_hospital}</td>
               </tr>
             </tbody>
           </table>
@@ -362,17 +402,13 @@ function PatientDetailPage() {
                 <th>手术类型</th>
                 <th>手术时间</th>
                 <th>出院时间</th>
-                <th>初始华法林用量</th>
-                <th>病史信息</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td>{patient.surgeryType}</td>
-                <td>{patient.surgeryDate}</td>
-                <td>{patient.dischargeDate}</td>
-                <td>{patient.initialDose}</td>
-                <td>{patient.history}</td>
+                <td>{patient.surgery_type}</td>
+                <td>{patient.operation_date}</td>
+                <td>{patient.discharge_date}</td>
               </tr>
             </tbody>
           </table>
@@ -385,22 +421,19 @@ function PatientDetailPage() {
               <tr>
                 <th>单号</th>
                 <th>华法林当前用量</th>
-                <th>INR</th>
-                <th>化验时间</th>
                 <th>系统建议用量</th>
                 <th>确认状态</th>
                 <th>医生确认用量</th>
                 <th>备注</th>
+                <th>提报时间</th>
                 <th>操作</th>
               </tr>
             </thead>
             <tbody>
-              {patient.records.map((r: any) => (
+              {patient.medication_plans && patient.medication_plans.map((r: any) => (
                 <tr key={r.id}>
                   <td>{r.id}</td>
                   <td>{r.dose}</td>
-                  <td>{r.inr}</td>
-                  <td>{r.testDate}</td>
                   <td>{r.sysDose}</td>
                   <td>{r.confirmStatus}</td>
                   <td>
@@ -417,8 +450,9 @@ function PatientDetailPage() {
                       r.note
                     )}
                   </td>
+                  <td>{r.testDate}</td>
                   <td>
-                    {r.confirmStatus === '待确认' && editRow !== r.id && (
+                    {r.confirmStatus === 'pending' && editRow !== r.id && (
                       <>
                         <a href="#" style={{ color: '#1677ff', marginRight: 8 }} onClick={e => { e.preventDefault(); handleEdit(r) }}>修改</a>
                         <a href="#" style={{ color: 'red', marginRight: 8 }} onClick={e => { e.preventDefault(); handleConfirm(r.id) }}>确认</a>
@@ -444,10 +478,11 @@ function PatientDetailPage() {
 
 function AddPatientPage({ onAdd }: { onAdd: (patient: any) => void }) {
   const navigate = useNavigate()
-  const [form, setForm] = useState({
+  const [formData, setFormData] = useState({
     name: '',
     gender: '',
     phone: '',
+    age: '',
     surgeryType: '',
     surgeryDate: '',
     dischargeDate: '',
@@ -455,60 +490,65 @@ function AddPatientPage({ onAdd }: { onAdd: (patient: any) => void }) {
     inrDate: '',
     dose: '',
     note: '',
+    initial_warfarin_dose: '',
   })
-  const [error, setError] = useState('')
+  const [errors, setErrors] = useState<Partial<typeof formData>>({})
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
-    setForm(prev => ({ ...prev, [name]: value }))
+    setFormData(prev => ({ ...prev, [name]: value }))
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const validate = () => {
+    const newErrors: Partial<typeof formData> = {}
+    if (!formData.name.trim()) newErrors.name = '姓名不能为空'
+    if (!formData.gender.trim()) newErrors.gender = '性别不能为空'
+    if (!formData.phone.trim()) newErrors.phone = '手机号不能为空'
+    if (!formData.surgeryType.trim()) newErrors.surgeryType = '手术类型不能为空'
+    if (!formData.surgeryDate.trim()) newErrors.surgeryDate = '手术时间不能为空'
+    if (!formData.dischargeDate.trim()) newErrors.dischargeDate = '出院时间不能为空'
+    if (!formData.inr.trim()) newErrors.inr = 'INR不能为空'
+    if (!formData.inrDate.trim()) newErrors.inrDate = 'INR检查时间不能为空'
+    if (!formData.dose.trim()) newErrors.dose = '华法林剂量不能为空'
+    if (!formData.initial_warfarin_dose.trim()) newErrors.initial_warfarin_dose = '初始剂量为必填项'
+
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // 校验
-    if (!form.name || !form.gender || !form.phone || !form.surgeryType || !form.surgeryDate || !form.dischargeDate || !form.inr || !form.inrDate || !form.dose) {
-      setError('请填写所有必填项')
-      return
+    if (validate()) {
+      if (window.confirm('确认提交新患者信息吗？')) {
+        try {
+          const response = await fetch('http://localhost:3001/api/patients', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              ...formData,
+              // 后端需要数字类型
+              age: Number(formData.age),
+            }),
+          })
+
+          const result = await response.json()
+
+          if (response.ok && result.success) {
+            alert('患者添加成功!')
+            // 调用父组件的回调，在前端实时更新列表
+            onAdd(result.data)
+            navigate('/') // 跳转回列表页
+          } else {
+            throw new Error(result.message || '提交失败，请检查数据。');
+          }
+        } catch (error: any) {
+          alert(`发生错误: ${error.message}`);
+          // console.error('Submit error:', error);
+        }
+      }
     }
-    if (!/^\d{11}$/.test(form.phone)) {
-      setError('手机号需为11位数字')
-      return
-    }
-    setError('')
-    if (!window.confirm('确认要登记该患者吗？')) return
-    // 生成新患者ID
-    const newId = String(Date.now()).slice(-6)
-    onAdd({
-      id: newId,
-      name: form.name,
-      phone: form.phone,
-      gender: form.gender,
-      age: '',
-      surgeryType: form.surgeryType,
-      surgeryDate: form.surgeryDate,
-      dischargeDate: form.dischargeDate,
-      latestINR: form.inr,
-      testDate: form.inrDate,
-      currentDose: form.dose,
-      suggestedDose: form.dose,
-      status: '待认',
-      initialDose: form.dose,
-      history: form.note,
-      records: [
-        {
-          id: String(Date.now()),
-          dose: form.dose,
-          inr: form.inr,
-          testDate: form.inrDate,
-          sysDose: form.dose,
-          confirmStatus: '待确认',
-          doctorDose: '',
-          note: form.note,
-          op: '',
-        },
-      ],
-    })
-    navigate('/')
   }
 
   return (
@@ -518,18 +558,21 @@ function AddPatientPage({ onAdd }: { onAdd: (patient: any) => void }) {
         <form onSubmit={handleSubmit} className="add-patient-form">
           <div className="form-title">新增患者</div>
           <div className="form-fields">
-            <label>姓名<span className="required">*</span> <input name="name" value={form.name} onChange={handleChange} /></label>
-            <label>性别<span className="required">*</span> <input name="gender" value={form.gender} onChange={handleChange} /></label>
-            <label>手机号<span className="required">*</span> <input name="phone" value={form.phone} onChange={handleChange} maxLength={11} /></label>
-            <label>手术类型<span className="required">*</span> <input name="surgeryType" value={form.surgeryType} onChange={handleChange} /></label>
-            <label>手术时间<span className="required">*</span> <input name="surgeryDate" value={form.surgeryDate} onChange={handleChange} type="date" /></label>
-            <label>出院时间<span className="required">*</span> <input name="dischargeDate" value={form.dischargeDate} onChange={handleChange} type="date" /></label>
-            <label>INR<span className="required">*</span> <input name="inr" value={form.inr} onChange={handleChange} /></label>
-            <label>INR检查时间<span className="required">*</span> <input name="inrDate" value={form.inrDate} onChange={handleChange} type="date" /></label>
-            <label>华法林剂量<span className="required">*</span> <input name="dose" value={form.dose} onChange={handleChange} /></label>
-            <label>备注 <textarea name="note" value={form.note} onChange={handleChange} style={{ resize: 'none', height: 60 }} /></label>
+            <label>姓名<span className="required">*</span> <input name="name" value={formData.name} onChange={handleChange} /></label>
+            <label>性别<span className="required">*</span> <input name="gender" value={formData.gender} onChange={handleChange} /></label>
+            <label>手机号<span className="required">*</span> <input name="phone" value={formData.phone} onChange={handleChange} maxLength={11} /></label>
+            <label>手术类型<span className="required">*</span> <input name="surgeryType" value={formData.surgeryType} onChange={handleChange} /></label>
+            <label>手术时间<span className="required">*</span> <input name="surgeryDate" value={formData.surgeryDate} onChange={handleChange} type="date" /></label>
+            <label>出院时间<span className="required">*</span> <input name="dischargeDate" value={formData.dischargeDate} onChange={handleChange} type="date" /></label>
+            <label>INR<span className="required">*</span> <input name="inr" value={formData.inr} onChange={handleChange} /></label>
+            <label>INR检查时间<span className="required">*</span> <input name="inrDate" value={formData.inrDate} onChange={handleChange} type="date" /></label>
+            <label>华法林剂量<span className="required">*</span> <input name="dose" value={formData.dose} onChange={handleChange} /></label>
+            <label>备注 <textarea name="note" value={formData.note} onChange={handleChange} style={{ resize: 'none', height: 60 }} /></label>
+            <label>初始华法林剂量<span className="required">*</span> <input name="initial_warfarin_dose" value={formData.initial_warfarin_dose} onChange={handleChange} /></label>
           </div>
-          {error && <div className="form-error">{error}</div>}
+          {Object.entries(errors).map(([fieldName, errorMessage]) => (
+            <div key={fieldName} className="form-error">{errorMessage}</div>
+          ))}
           <button type="submit" className="form-submit-btn">注册新患者</button>
         </form>
       </main>
