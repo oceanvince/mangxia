@@ -1,6 +1,5 @@
 const patientService = require('../services/patientService');
-const { Pool } = require('pg');
-const pool = new Pool();
+const { pool } = require('../db');
 
 const getAllPatients = async (req, res) => {
     try {
@@ -65,6 +64,24 @@ const getPatientById = async (req, res) => {
  * @param {Response} res 
  */
 const registerPatient = async (req, res) => {
+    const {
+        name,
+        gender,
+        phone,
+        operation_type,
+        operation_date,
+        discharge_date,
+        metric_value,
+        doctor_suggested_dosage
+    } = req.body;
+
+    // Validate input
+    if (!name || !gender || !phone || !operation_type || !operation_date || !discharge_date || !metric_value || !doctor_suggested_dosage) {
+        return res.status(400).json({
+            message: 'Missing required fields'
+        });
+    }
+
     const client = await pool.connect();
     
     try {
@@ -77,12 +94,12 @@ const registerPatient = async (req, res) => {
              (name, gender, phone, operation_type, operation_date, discharge_date) 
              VALUES ($1, $2, $3, $4, $5, $6) RETURNING patient_id`,
             [
-                req.body.name,
-                req.body.gender,
-                req.body.phone,
-                req.body.operation_type,
-                req.body.operation_date,
-                req.body.discharge_date
+                name,
+                gender,
+                phone,
+                operation_type,
+                operation_date,
+                discharge_date
             ]
         );
         
@@ -93,7 +110,7 @@ const registerPatient = async (req, res) => {
             `INSERT INTO health_metrics_tab 
              (patient_id, metric_type, metric_value, measured_at) 
              VALUES ($1, $2, $3, CURRENT_TIMESTAMP) RETURNING metric_id`,
-            [patientId, 'INR', req.body.metric_value]
+            [patientId, 'INR', metric_value]
         );
         
         const metricId = metricResult.rows[0].metric_id;
@@ -101,9 +118,9 @@ const registerPatient = async (req, res) => {
         // 4. Create medication plan
         await client.query(
             `INSERT INTO medication_plan_tab 
-             (patient_id, metric_id, doctor_suggested_dosage, status) 
-             VALUES ($1, $2, $3, $4)`,
-            [patientId, metricId, req.body.doctor_suggested_dosage, 'active']
+             (patient_id, metric_id, medication_name, doctor_suggested_dosage, status) 
+             VALUES ($1, $2, $3, $4, $5)`,
+            [patientId, metricId, '华法林', doctor_suggested_dosage, 'active']
         );
         
         await client.query('COMMIT');
@@ -111,7 +128,6 @@ const registerPatient = async (req, res) => {
         res.status(201).json({
             message: 'Patient registered successfully',
             patientId,
-            accountId
         });
         
     } catch (error) {
