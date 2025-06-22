@@ -1,0 +1,21 @@
+<view class="container">
+  <view class="avatar-section">
+    <view class="avatar-placeholder"></view>
+    <text class="user-id">User ID: {{userInfo.patient_id || '-'}}</text>
+  </view>
+
+  <view class="info-card">
+    <view class="info-row">
+      <text class="label">姓名</text>
+      <text class="value">{{userInfo.patient_name || '-'}}</text>
+    </view>
+    <view class="info-row">
+      <text class="label">手机号</text>
+      <text class="value">{{userInfo.phone || '-'}}</text>
+    </view>
+    <view class="info-row">
+      <text class="label">手术时间</text>
+      <text class="value">{{userInfo.operation_date || '-'}}</text>
+    </view>
+  </view>
+</view>

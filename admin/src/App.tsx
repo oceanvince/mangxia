@@ -440,7 +440,7 @@ function PatientDetailPage() {
           </table>
         </div>
         {/* 用药记录 */}
-        <div>
+      <div>
           <div style={{ fontWeight: 600, marginBottom: 8 }}>用药记录</div>
           <table className="patient-table">
             <thead>
@@ -611,14 +611,14 @@ function AddPatientPage() {
             <label>INR检查时间<span className="required">*</span> <input name="inrDate" value={formData.inrDate} onChange={handleChange} type="date" /></label>
             <label>华法林剂量<span className="required">*</span> <input name="dose" value={formData.dose} onChange={handleChange} /></label>
             <label>备注 <textarea name="note" value={formData.note} onChange={handleChange} style={{ resize: 'none', height: 60 }} /></label>
-          </div>
+      </div>
           {Object.entries(errors).map(([fieldName, errorMessage]) => (
             <div key={fieldName} className="form-error">{errorMessage}</div>
           ))}
           <button type="submit" className="form-submit-btn">注册新患者</button>
         </form>
       </main>
-    </div>
+      </div>
   )
 }
 

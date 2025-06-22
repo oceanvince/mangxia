@@ -1,0 +1,30 @@
+<view class="container">
+  <view class="card">
+    <view class="info-row">
+      <text class="label">姓名</text>
+      <text class="value">{{currentStatus.patient_name || '-'}}</text>
+    </view>
+    <view class="info-row">
+      <text class="label">医嘱华法林用量</text>
+      <text class="value">{{currentStatus.current_dosage || '-'}}mg</text>
+    </view>
+    <view class="info-row">
+      <text class="label">上次INR凝血指标</text>
+      <text class="value">{{currentStatus.metric.value || '-'}}</text>
+    </view>
+    <view class="info-row">
+      <text class="label">化验时间</text>
+      <text class="value">{{currentStatus.metric.measured_at || '-'}}</text>
+    </view>
+    <view class="info-row">
+      <text class="label">化验记录上传时间</text>
+      <text class="value">{{currentStatus.metric.measured_at || '-'}}</text>
+    </view>
+    <view class="info-row">
+      <text class="label">医嘱生效时间</text>
+      <text class="value">{{currentStatus.updated_at || '-'}}</text>
+    </view>
+  </view>
+
+  <view class="upload-btn" bindtap="onUploadTap">上传最新化验记录</view>
+</view> 

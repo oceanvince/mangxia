@@ -1,0 +1,18 @@
+/**app.wxss**/
+page {
+  background-color: #f5f7fa;
+}
+
+/* tabBar字体大小强制设置 */
+.tabbar_text {
+  font-size: 16px;
+}
+
+.wx-tabbar-text {
+  font-size: 16px;
+}
+
+/* 全局字体优化 */
+view, text, button {
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
+} 

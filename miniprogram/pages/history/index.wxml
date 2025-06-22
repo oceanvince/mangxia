@@ -1,0 +1,29 @@
+<view class="container">
+  <view class="title">最近3次化验记录</view>
+
+  <block wx:for="{{historyList}}" wx:key="plan_id">
+    <view class="history-card">
+      <view class="info-row">
+        <text class="label">化验时间</text>
+        <text class="value">{{item.metric_measured_at || '-'}}</text>
+      </view>
+      <view class="info-row">
+        <text class="label">INR凝血指标</text>
+        <text class="value">{{item.metric_value || '-'}}</text>
+      </view>
+      <view class="info-row">
+        <text class="label">化验记录上传时间</text>
+        <text class="value">{{item.metric_created_at || '-'}}</text>
+      </view>
+      <view class="info-row">
+        <text class="label">医嘱华法林剂量</text>
+        <text class="value">{{item.doctor_suggested_dosage || '-'}}</text>
+      </view>
+      <view class="info-row">
+        <text class="label">医嘱生效时间</text>
+        <text class="value">{{item.plan_updated_at || '-'}}</text>
+      </view>
+      <view class="divider"></view>
+    </view>
+  </block>
+</view> 
