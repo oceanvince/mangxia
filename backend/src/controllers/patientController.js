@@ -105,6 +105,92 @@ const updateMedicationPlan = async (req, res) => {
   }
 };
 
+// Bind account to patient profile
+const bindAccountToProfile = async (req, res) => {
+  try {
+    const { accountId, patientId } = req.body;
+    
+    // Basic validation
+    if (!accountId || !patientId) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Both accountId and patientId are required' 
+      });
+    }
+
+    const result = await patientService.bindAccountToProfile(accountId, patientId);
+    
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+
+    res.status(200).json(result);
+  } catch (error) {
+    console.error('绑定账号失败:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: '绑定账号失败' 
+    });
+  }
+};
+
+// Generate QR code for patient profile
+const generateProfileQRCode = async (req, res) => {
+  try {
+    const { patientId } = req.params;
+    
+    if (!patientId) {
+      return res.status(400).json({
+        success: false,
+        error: '患者ID不能为空'
+      });
+    }
+
+    const result = await patientService.generateProfileQRCode(patientId);
+    
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+
+    res.status(200).json(result);
+  } catch (error) {
+    console.error('生成二维码失败:', error);
+    res.status(500).json({
+      success: false,
+      error: '生成二维码失败'
+    });
+  }
+};
+
+// Unbind account from patient profile
+const unbindAccountFromProfile = async (req, res) => {
+  try {
+    const { accountId, patientId } = req.body;
+    
+    // Basic validation
+    if (!accountId || !patientId) {
+      return res.status(400).json({ 
+        success: false, 
+        error: '账号ID和患者ID不能为空' 
+      });
+    }
+
+    const result = await patientService.unbindAccountFromProfile(accountId, patientId);
+    
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+
+    res.status(200).json(result);
+  } catch (error) {
+    console.error('解绑账号失败:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: '解绑账号失败' 
+    });
+  }
+};
+
 module.exports = {
   getAllPatients,
   getPatientById,
@@ -113,5 +199,8 @@ module.exports = {
   getLatestActivePlans,
   registerPatient,
   addHealthMetric,
-  updateMedicationPlan
+  updateMedicationPlan,
+  bindAccountToProfile,
+  generateProfileQRCode,
+  unbindAccountFromProfile
 }; 

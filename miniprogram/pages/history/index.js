@@ -1,14 +1,31 @@
+const app = getApp()
+
 Page({
   data: {
-    historyList: []
+    historyData: [],
+    isLoading: false
   },
 
   onLoad() {
-    this.fetchHistoryList()
+    // Check auth state before loading data
+    if (!app.globalData.isLoggedIn || app.globalData.needRegister) {
+      app.checkLoginState()
+      return
+    }
+    this.fetchHistoryData()
   },
 
   onShow() {
-    this.fetchHistoryList()
+    // Check auth state when page becomes visible
+    if (!app.globalData.isLoggedIn || app.globalData.needRegister) {
+      app.checkLoginState()
+      return
+    }
+    this.fetchHistoryData()
+  },
+
+  onPullDownRefresh() {
+    this.fetchHistoryData()
   },
 
   // 格式化UTC时间为北京时间
@@ -23,49 +40,90 @@ Page({
     return `${year}-${month}-${day} ${hours}:${minutes}`;
   },
 
-  fetchHistoryList() {
-    const patientId = 'b36dd2d8-a2c8-45b2-862c-37cfadcc655e'  // 新患者ID - 肖亚文
-    
-    const baseUrl = 'http://localhost:3001'  // 使用统一的baseUrl
-    const url = `${baseUrl}/api/patients/${patientId}/latest-active-plans`
-    console.log('发起请求:', url)
+  async fetchHistoryData() {
+    // Prevent multiple concurrent requests
+    if (this.data.isLoading) {
+      return
+    }
 
-    wx.request({
-      url: url,
-      method: 'GET',
-      success: (res) => {
-        console.log('请求成功，状态码:', res.statusCode)
-        console.log('获取历史记录成功:', res.data)
-        if (res.statusCode === 200 && res.data.success) {
-          // 格式化时间
-          const formattedData = res.data.data.map(item => ({
-            ...item,
-            metric_measured_at: this.formatDateTime(item.metric_measured_at),
-            metric_created_at: this.formatDateTime(item.metric_created_at),
-            plan_updated_at: this.formatDateTime(item.plan_updated_at),
-            plan_created_at: this.formatDateTime(item.plan_created_at)
-          }));
-          
-          this.setData({
-            historyList: formattedData
-          })
-        } else {
-          wx.showToast({
-            title: res.data.message || '获取历史记录失败',
-            icon: 'error'
-          })
-        }
-      },
-      fail: (err) => {
-        console.error('获取历史记录失败:', err)
-        if (err.errMsg.includes('url not in domain list')) {
-          console.warn('请在开发者工具中开启"不校验合法域名"选项')
-        }
+    // Check auth state before making API request
+    if (!app.globalData.isLoggedIn || app.globalData.needRegister) {
+      app.checkLoginState()
+      return
+    }
+
+    this.setData({ isLoading: true })
+
+    try {
+      // Get patient ID from account profile
+      const profileRes = await app.request({
+        url: `/api/auth/check-profile/${app.globalData.accountId}`,
+        method: 'GET'
+      })
+      
+      if (profileRes.success && profileRes.data.hasProfile && profileRes.data.profileId) {
+        await this.fetchLatestPlans(profileRes.data.profileId)
+      } else {
         wx.showToast({
-          title: '获取历史记录失败',
-          icon: 'error'
+          title: '未绑定患者信息',
+          icon: 'error',
+          duration: 2000
         })
       }
-    })
+    } catch (err) {
+      console.error('获取账号信息失败:', err)
+      wx.showToast({
+        title: err.message || '获取账号信息失败',
+        icon: 'error',
+        duration: 2000
+      })
+    } finally {
+      this.setData({ isLoading: false })
+      wx.stopPullDownRefresh()
+    }
+  },
+
+  async fetchLatestPlans(patientId) {
+    try {
+      const url = `/api/patients/${patientId}/latest-active-plans`
+      console.log('发起请求:', url)
+
+      const res = await app.request({
+        url: url,
+        method: 'GET'
+      })
+      
+      if (res.success) {
+        // 格式化时间
+        const formattedData = res.data.map(plan => ({
+          plan_id: plan.plan_id,
+          metric_value: plan.metric?.metric_value,
+          metric_measured_at: this.formatDateTime(plan.metric?.measured_at),
+          metric_created_at: this.formatDateTime(plan.metric?.created_at),
+          doctor_suggested_dosage: plan.doctor_suggested_dosage,
+          plan_updated_at: this.formatDateTime(plan.updated_at),
+          plan_created_at: this.formatDateTime(plan.created_at),
+          status: plan.status
+        }));
+        
+        this.setData({
+          historyData: formattedData
+        })
+      } else {
+        console.error('获取历史记录失败:', res.error)
+        wx.showToast({
+          title: res.error || '获取历史记录失败',
+          icon: 'error',
+          duration: 2000
+        })
+      }
+    } catch (err) {
+      console.error('请求失败:', err)
+      wx.showToast({
+        title: err.message || '网络错误',
+        icon: 'error',
+        duration: 2000
+      })
+    }
   }
 }) 

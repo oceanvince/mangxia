@@ -1,35 +1,45 @@
 {
   "pages": [
     "pages/home/index",
+    "pages/login/index",
+    "pages/bind/index",
     "pages/history/index",
     "pages/profile/index"
   ],
   "window": {
     "backgroundTextStyle": "light",
     "navigationBarBackgroundColor": "#fff",
-    "navigationBarTitleText": "芒夏随访系统",
+    "navigationBarTitleText": "芒夏随访",
     "navigationBarTextStyle": "black"
   },
   "tabBar": {
+    "custom": false,
     "color": "#999999",
-    "selectedColor": "#6c8cff",
+    "selectedColor": "#1890ff",
     "backgroundColor": "#ffffff",
-    "fontSize": 22,
-    "iconWidth": 24,
-    "borderStyle": "white",
     "list": [
       {
         "pagePath": "pages/home/index",
-        "text": "首页"
+        "text": "首页",
+        "iconPath": "assets/images/tab-home.png",
+        "selectedIconPath": "assets/images/tab-home-active.png"
       },
       {
         "pagePath": "pages/history/index",
-        "text": "历史记录"
+        "text": "历史",
+        "iconPath": "assets/images/tab-history.png",
+        "selectedIconPath": "assets/images/tab-history-active.png"
       },
       {
         "pagePath": "pages/profile/index",
-        "text": "我的"
+        "text": "我的",
+        "iconPath": "assets/images/tab-profile.png",
+        "selectedIconPath": "assets/images/tab-profile-active.png"
       }
     ]
-  }
+  },
+  "usingComponents": {
+    "home-button": "/components/home-button/index"
+  },
+  "sitemapLocation": "sitemap.json"
 } 

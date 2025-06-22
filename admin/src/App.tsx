@@ -139,6 +139,30 @@ function Sidebar() {
   )
 }
 
+// HomeButton component
+function HomeButton() {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Only show on pages other than home
+  if (location.pathname === '/') return null;
+
+  const handleHomeClick = () => {
+    // Navigate to home and reload the app without clearing cache
+    navigate('/');
+    window.location.reload();
+  };
+
+  return (
+    <button className="home-button" onClick={handleHomeClick}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+      </svg>
+      返回首页
+    </button>
+  );
+}
+
 function PatientListPage() {
   const [patients, setPatients] = useState([]);
   const navigate = useNavigate();
@@ -185,6 +209,7 @@ function PatientListPage() {
     <div className="container">
       <Sidebar />
       <main className="main-content">
+        <HomeButton />
         <div className="filter-bar">
           <label>用户ID <input type="text" disabled placeholder="（筛选功能暂未实现）" /></label>
           <label>姓名 <input type="text" disabled placeholder="（筛选功能暂未实现）" /></label>
@@ -247,6 +272,9 @@ function PatientDetailPage() {
   const [patient, setPatient] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [qrCode, setQrCode] = useState<string | null>(null);
+  const [generatingQR, setGeneratingQR] = useState(false);
+  const [unbinding, setUnbinding] = useState(false);
 
   // 本地交互状态
   const [editRow, setEditRow] = useState<string | null>(null);
@@ -377,6 +405,132 @@ function PatientDetailPage() {
     });
   };
 
+  const handleGenerateQR = async () => {
+    if (!patientId || generatingQR) return;
+
+    setGeneratingQR(true);
+    try {
+      const response = await fetch(`http://localhost:3001/api/patients/${patientId}/qr-code`);
+      if (!response.ok) {
+        throw new Error('Failed to generate QR code');
+      }
+      const result = await response.json();
+      if (result.success) {
+        setQrCode(result.data.qrCode);
+        // Open QR code in a new window
+        const win = window.open('', '_blank');
+        if (win) {
+          win.document.write(`
+            <html>
+              <head>
+                <title>患者绑定二维码</title>
+                <style>
+                  body {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    min-height: 100vh;
+                    margin: 0;
+                    font-family: system-ui, -apple-system, sans-serif;
+                  }
+                  .qr-container {
+                    text-align: center;
+                    padding: 20px;
+                  }
+                  .patient-name {
+                    font-size: 24px;
+                    margin-bottom: 20px;
+                  }
+                  .qr-code {
+                    max-width: 300px;
+                    margin-bottom: 20px;
+                  }
+                  .instructions {
+                    color: #666;
+                    max-width: 400px;
+                    text-align: center;
+                    line-height: 1.5;
+                  }
+                </style>
+              </head>
+              <body>
+                <div class="qr-container">
+                  <div class="patient-name">${patient.patient_name} 的绑定二维码</div>
+                  <img src="${result.data.qrCode}" class="qr-code" />
+                  <div class="instructions">
+                    请让患者使用芒夏小程序扫描此二维码完成账号绑定。<br/>
+                    二维码仅可使用一次，请勿重复使用。
+                  </div>
+                </div>
+              </body>
+            </html>
+          `);
+          win.document.close();
+        }
+      } else {
+        throw new Error(result.error || '生成二维码失败');
+      }
+    } catch (error: any) {
+      console.error('Error generating QR code:', error);
+      alert(error.message || '生成二维码失败，请稍后重试');
+    } finally {
+      setGeneratingQR(false);
+    }
+  };
+
+  const handleUnbind = async () => {
+    if (!patient?.wechat_id || !patientId || unbinding) return;
+
+    if (!window.confirm('确定要解除此患者的微信绑定吗？解绑后患者需要重新扫码绑定。')) {
+      return;
+    }
+
+    setUnbinding(true);
+    try {
+      // First get the account ID from the account_tab
+      const accountResponse = await fetch(`http://localhost:3001/api/auth/account-by-wechat/${patient.wechat_id}`);
+      const accountData = await accountResponse.json();
+      
+      if (!accountData.success || !accountData.data?.accountId) {
+        throw new Error('获取账号信息失败');
+      }
+
+      const response = await fetch('http://localhost:3001/api/patients/unbind-account', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          accountId: accountData.data.accountId,
+          patientId: patientId
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('解绑失败');
+      }
+
+      const result = await response.json();
+      if (result.success) {
+        alert('解绑成功');
+        // Refresh patient data
+        const updatedPatientResponse = await fetch(`http://localhost:3001/api/patients/${patientId}`);
+        const updatedPatientData = await updatedPatientResponse.json();
+        if (updatedPatientData.success) {
+          setPatient(updatedPatientData.data);
+        }
+      } else {
+        throw new Error(result.error || '解绑失败');
+      }
+    } catch (error: any) {
+      console.error('Error unbinding account:', error);
+      alert(error.message || '解绑失败，请稍后重试');
+    } finally {
+      setUnbinding(false);
+    }
+  };
+
   if (loading) {
     return <div>正在加载患者详情...</div>;
   }
@@ -391,9 +545,25 @@ function PatientDetailPage() {
     <div className="container">
       <Sidebar />
       <main className="main-content">
+        <HomeButton />
         {/* 患者信息 */}
         <div style={{ marginBottom: 24 }}>
-          <div style={{ fontWeight: 600, marginBottom: 8 }}>患者信息</div>
+          <div style={{ 
+            fontWeight: 600, 
+            marginBottom: 8,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <span>患者信息</span>
+            <button
+              className="qr-code-button"
+              onClick={handleGenerateQR}
+              disabled={generatingQR}
+            >
+              {generatingQR ? '生成中...' : '生成绑定二维码'}
+            </button>
+          </div>
           <table className="patient-table" style={{ width: 'auto', minWidth: 400 }}>
             <thead>
               <tr>
@@ -404,6 +574,7 @@ function PatientDetailPage() {
                 <th>年龄</th>
                 <th>主管医生</th>
                 <th>所属医院</th>
+                <th>微信绑定状态</th>
               </tr>
             </thead>
             <tbody>
@@ -415,6 +586,36 @@ function PatientDetailPage() {
                 <td>{calculateAge(patient.date_of_birth)}</td>
                 <td>{patient.doctor_name}</td>
                 <td>{patient.doctor_hospital}</td>
+                <td>
+                  {patient.wechat_id ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span className="wechat-status bound">
+                        已绑定 ({patient.wechat_id.slice(0, 8)}...)
+                      </span>
+                      <button
+                        onClick={handleUnbind}
+                        disabled={unbinding}
+                        className="unbind-button"
+                        style={{
+                          padding: '4px 8px',
+                          fontSize: '12px',
+                          backgroundColor: '#ff4d4f',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          opacity: unbinding ? 0.7 : 1
+                        }}
+                      >
+                        {unbinding ? '解绑中...' : '解除绑定'}
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="wechat-status unbound">
+                      未绑定
+                    </span>
+                  )}
+                </td>
               </tr>
             </tbody>
           </table>
@@ -598,6 +799,7 @@ function AddPatientPage() {
     <div className="container">
       <Sidebar />
       <main className="main-content">
+        <HomeButton />
         <form onSubmit={handleSubmit} className="add-patient-form">
           <div className="form-title">新增患者</div>
           <div className="form-fields">

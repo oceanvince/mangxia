@@ -1,4 +1,5 @@
 const db = require('../db');
+const QRCode = require('qrcode');
 
 // 获取所有患者
 const getAllPatients = async () => {
@@ -68,9 +69,11 @@ const getPatientById = async (patientId) => {
         TO_CHAR(p.operation_date, 'YYYY-MM-DD') AS operation_date,
         TO_CHAR(p.discharge_date, 'YYYY-MM-DD') AS discharge_date,
         COALESCE(d.name, '未分配') AS doctor_name,
-        COALESCE(d.hospital, 'N/A') AS doctor_hospital
+        COALESCE(d.hospital, 'N/A') AS doctor_hospital,
+        a.wechat_id
       FROM patient_profile_tab p
       LEFT JOIN doctor_profile_tab d ON p.primary_doctor_id = d.doctor_id
+      LEFT JOIN account_tab a ON a.profile_id = p.patient_id
       WHERE p.patient_id = $1;
     `;
     const { rows: patientRows } = await db.query(patientQuery, [patientId]);
@@ -359,6 +362,202 @@ const calculateSystemDosage = (lastConfirmedDose, newINR) => {
   return Math.max(0, newDosage);
 };
 
+// Bind account with patient profile
+const bindAccountToProfile = async (accountId, patientId) => {
+  const client = await db.getClient();
+  try {
+    await client.query('BEGIN');
+
+    // First check if patient profile exists
+    const profileQuery = `
+      SELECT p.patient_id, p.name
+      FROM patient_profile_tab p
+      WHERE p.patient_id = $1
+    `;
+    const { rows: profileRows } = await client.query(profileQuery, [patientId]);
+    
+    if (profileRows.length === 0) {
+      throw new Error('患者档案不存在');
+    }
+
+    // Then check if account exists and check its binding
+    const accountQuery = `
+      SELECT account_type, profile_id 
+      FROM account_tab 
+      WHERE account_id = $1 AND account_type = 'patient'
+    `;
+    const { rows: accountRows } = await client.query(accountQuery, [accountId]);
+    
+    if (accountRows.length === 0) {
+      throw new Error('账号不存在或不是患者账号');
+    }
+
+    // If account is already bound to this profile, return success
+    if (accountRows[0].profile_id === patientId) {
+      return {
+        success: true,
+        data: {
+          accountId,
+          patientId,
+          patientName: profileRows[0].name,
+          message: '已绑定成功'
+        }
+      };
+    }
+
+    // If account is bound to a different profile
+    if (accountRows[0].profile_id) {
+      throw new Error('账号已绑定其他档案');
+    }
+
+    // Check if profile is bound to any account
+    const profileBindingQuery = `
+      SELECT account_id 
+      FROM account_tab 
+      WHERE profile_id = $1
+    `;
+    const { rows: bindingRows } = await client.query(profileBindingQuery, [patientId]);
+    
+    if (bindingRows.length > 0) {
+      throw new Error('患者档案已被其他账号绑定');
+    }
+
+    // Update account_tab with profile_id
+    await client.query(
+      'UPDATE account_tab SET profile_id = $1 WHERE account_id = $2',
+      [patientId, accountId]
+    );
+
+    await client.query('COMMIT');
+
+    return {
+      success: true,
+      data: {
+        accountId,
+        patientId,
+        patientName: profileRows[0].name,
+        message: '绑定成功'
+      }
+    };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error binding account to profile:', error);
+    return {
+      success: false,
+      error: error.message || '绑定失败'
+    };
+  } finally {
+    client.release();
+  }
+};
+
+// Generate QR code for patient profile
+const generateProfileQRCode = async (patientId) => {
+  try {
+    // First verify that the patient profile exists and is not bound
+    const client = await db.getClient();
+    const checkQuery = `
+      SELECT p.patient_id, p.name, EXISTS (
+        SELECT 1 FROM account_tab a WHERE a.profile_id = p.patient_id
+      ) as is_bound
+      FROM patient_profile_tab p 
+      WHERE p.patient_id = $1
+    `;
+    
+    const { rows } = await client.query(checkQuery, [patientId]);
+    
+    if (rows.length === 0) {
+      return {
+        success: false,
+        error: '患者档案不存在'
+      };
+    }
+
+    if (rows[0].is_bound) {
+      return {
+        success: false,
+        error: '患者档案已绑定账号'
+      };
+    }
+
+    // Generate the data to be encoded in QR code
+    const qrData = {
+      patientId: rows[0].patient_id, // Use the actual UUID from the database
+      name: rows[0].name,
+      timestamp: Date.now()
+    };
+
+    // Generate QR code as data URL
+    const qrCodeDataURL = await QRCode.toDataURL(JSON.stringify(qrData), {
+      errorCorrectionLevel: 'H',
+      margin: 1,
+      width: 300
+    });
+
+    return {
+      success: true,
+      data: {
+        qrCode: qrCodeDataURL,
+        patientName: rows[0].name,
+        patientId: rows[0].patient_id // Use the actual UUID from the database
+      }
+    };
+
+  } catch (error) {
+    console.error('生成二维码失败:', error);
+    return {
+      success: false,
+      error: '生成二维码失败'
+    };
+  }
+};
+
+// Unbind account from patient profile
+const unbindAccountFromProfile = async (accountId, patientId) => {
+  const client = await db.getClient();
+  try {
+    await client.query('BEGIN');
+
+    // Check if the account and profile are actually bound to each other
+    const verifyQuery = `
+      SELECT a.account_id, a.profile_id
+      FROM account_tab a
+      WHERE a.account_id = $1 AND a.profile_id = $2
+    `;
+    const { rows } = await client.query(verifyQuery, [accountId, patientId]);
+    
+    if (rows.length === 0) {
+      throw new Error('账号与患者档案未绑定');
+    }
+
+    // Update account_tab to remove profile_id
+    await client.query(
+      'UPDATE account_tab SET profile_id = NULL WHERE account_id = $1',
+      [accountId]
+    );
+
+    await client.query('COMMIT');
+
+    return {
+      success: true,
+      data: {
+        accountId,
+        patientId,
+        message: '解绑成功'
+      }
+    };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error unbinding account from profile:', error);
+    return {
+      success: false,
+      error: error.message || '解绑失败'
+    };
+  } finally {
+    client.release();
+  }
+};
+
 module.exports = {
   getAllPatients,
   getPatientById,
@@ -367,5 +566,8 @@ module.exports = {
   getLatestActivePlans,
   registerPatient,
   addHealthMetric,
-  updateMedicationPlan
+  updateMedicationPlan,
+  bindAccountToProfile,
+  generateProfileQRCode,
+  unbindAccountFromProfile
 }; 

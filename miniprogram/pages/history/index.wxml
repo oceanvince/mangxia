@@ -1,7 +1,7 @@
 <view class="container">
   <view class="title">最近3次化验记录</view>
 
-  <block wx:for="{{historyList}}" wx:key="plan_id">
+  <block wx:for="{{historyData}}" wx:key="plan_id">
     <view class="history-card">
       <view class="info-row">
         <text class="label">化验时间</text>
@@ -22,6 +22,10 @@
       <view class="info-row">
         <text class="label">医嘱生效时间</text>
         <text class="value">{{item.plan_updated_at || '-'}}</text>
+      </view>
+      <view class="info-row">
+        <text class="label">状态</text>
+        <text class="value {{item.status === 'pending' ? 'pending' : ''}}">{{item.status === 'pending' ? '待处理' : '已处理'}}</text>
       </view>
       <view class="divider"></view>
     </view>

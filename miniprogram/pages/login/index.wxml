@@ -1,0 +1,34 @@
+<view class="container">
+  <view class="logo-container">
+    <image class="logo" src="/assets/images/logo.png" mode="aspectFit"></image>
+  </view>
+
+  <view class="login-container">
+    <button 
+      type="primary" 
+      bindtap="handleWechatLogin" 
+      loading="{{loading}}"
+      disabled="{{loading}}"
+      class="login-button">
+      微信登录
+    </button>
+
+    <view wx:if="{{loginFailed}}" class="error-container">
+      <view class="error-message">{{error}}</view>
+      <button 
+        type="default" 
+        bindtap="retryLogin" 
+        class="retry-button">
+        重试
+      </button>
+    </view>
+
+    <view wx:if="{{debugInfo}}" class="debug-container">
+      <view class="debug-title">调试信息：</view>
+      <view class="debug-content">
+        <view>错误详情：{{debugInfo.errorDetail}}</view>
+        <view>响应数据：{{debugInfo.responseData}}</view>
+      </view>
+    </view>
+  </view>
+</view> 

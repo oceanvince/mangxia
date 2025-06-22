@@ -30,7 +30,7 @@ CREATE TABLE account_tab (
 -- Doctor profile table
 CREATE TABLE doctor_profile_tab (
     doctor_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    account_id UUID UNIQUE REFERENCES account_tab(account_id) ON DELETE CASCADE,
+    -- account_id UUID UNIQUE REFERENCES account_tab(account_id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     gender gender_type,
     department TEXT,
@@ -42,7 +42,7 @@ CREATE TABLE doctor_profile_tab (
 -- Patient profile table
 CREATE TABLE patient_profile_tab (
     patient_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    account_id UUID UNIQUE REFERENCES account_tab(account_id) ON DELETE CASCADE,
+    -- account_id UUID UNIQUE REFERENCES account_tab(account_id) ON DELETE CASCADE,
     primary_doctor_id UUID REFERENCES doctor_profile_tab(doctor_id),
     name TEXT NOT NULL,
     phone VARCHAR(20),

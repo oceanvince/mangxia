@@ -1,0 +1,3 @@
+<view class="home-button" bindtap="onTapHome">
+  <image class="home-icon" src="/assets/images/tab-home.png" mode="aspectFit"></image>
+</view> 

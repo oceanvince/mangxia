@@ -1,0 +1,14 @@
+<!-- 账号绑定页面 -->
+<view class="container">
+  <view class="bind-message">扫码绑定账号</view>
+  <button 
+    class="scan-button" 
+    type="primary" 
+    bindtap="handleScan"
+    loading="{{loading || scanning}}"
+    disabled="{{loading || scanning}}"
+  >
+    {{loading ? '绑定中...' : scanning ? '扫描中...' : '扫描二维码'}}
+  </button>
+  <view class="hint-text">请扫描医生提供的二维码进行绑定</view>
+</view> 

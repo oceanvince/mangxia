@@ -14,4 +14,13 @@ router.post('/:patientId/metrics', patientController.addHealthMetric);
 
 router.put('/medication-plan/:planId', patientController.updateMedicationPlan);
 
+// Generate QR code for patient profile
+router.get('/:patientId/qr-code', patientController.generateProfileQRCode);
+
+// Bind account to patient profile
+router.post('/bind-account', patientController.bindAccountToProfile);
+
+// Unbind account from patient profile
+router.post('/unbind-account', patientController.unbindAccountFromProfile);
+
 module.exports = router; 
