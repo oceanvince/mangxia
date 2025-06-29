@@ -59,6 +59,18 @@ const getLatestActivePlans = async (req, res) => {
   }
 };
 
+// 获取患者健康指标记录
+const getPatientMetrics = async (req, res) => {
+  try {
+    const { patientId } = req.params;
+    const result = await patientService.getPatientMetrics(patientId);
+    res.json(result);
+  } catch (error) {
+    console.error('获取患者健康指标失败:', error);
+    res.status(500).json({ success: false, error: '获取患者健康指标失败' });
+  }
+};
+
 // 注册新患者
 const registerPatient = async (req, res) => {
   try {
@@ -82,8 +94,57 @@ const addHealthMetric = async (req, res) => {
   try {
     const { patientId } = req.params;
     const metricData = req.body;
+    const imageFile = req.file; // 从multer获取上传的文件
     
-    const result = await patientService.addHealthMetric(patientId, metricData);
+    // 输入验证
+    if (!metricData.metric_value || !metricData.metric_type) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'INR值和指标类型不能为空' 
+      });
+    }
+    
+    // INR值范围验证
+    const inrValue = parseFloat(metricData.metric_value);
+    if (isNaN(inrValue) || inrValue <= 0 || inrValue > 10) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'INR值必须在0-10之间的有效数字' 
+      });
+    }
+    
+    // 检查时间验证（如果提供）
+    if (metricData.measured_at) {
+      const measuredDate = new Date(metricData.measured_at);
+      const now = new Date();
+      if (measuredDate > now) {
+        return res.status(400).json({ 
+          success: false, 
+          error: '检查时间不能晚于当前时间' 
+        });
+      }
+    }
+    
+    // 图片文件验证（如果提供）
+    if (imageFile) {
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
+      if (!allowedTypes.includes(imageFile.mimetype)) {
+        return res.status(400).json({
+          success: false,
+          error: '只支持 JPG、PNG、GIF 格式的图片'
+        });
+      }
+      
+      // 限制文件大小为5MB
+      if (imageFile.size > 5 * 1024 * 1024) {
+        return res.status(400).json({
+          success: false,
+          error: '图片文件大小不能超过5MB'
+        });
+      }
+    }
+    
+    const result = await patientService.addHealthMetric(patientId, metricData, imageFile);
     res.status(201).json(result);
   } catch (error) {
     console.error('添加健康指标失败:', error);
@@ -197,6 +258,7 @@ module.exports = {
   getCurrentStatus,
   getPatientProfile,
   getLatestActivePlans,
+  getPatientMetrics,
   registerPatient,
   addHealthMetric,
   updateMedicationPlan,

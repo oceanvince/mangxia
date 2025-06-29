@@ -1,4 +1,9 @@
 <view class="container">
+  <!-- 状态Banner -->
+  <view wx:if="{{statusBanner.show}}" class="status-banner {{statusBanner.type}}">
+    <text class="banner-text">{{statusBanner.text}}</text>
+  </view>
+
   <view class="card">
     <view class="info-row">
       <text class="label">姓名</text>
@@ -26,5 +31,7 @@
     </view>
   </view>
 
-  <view class="upload-btn" bindtap="onUploadTap">上传最新化验记录</view>
+  <view class="upload-btn {{hasPendingRecord ? 'disabled' : ''}}" bindtap="onUploadTap">
+    {{hasPendingRecord ? '已上传' : '上传最新化验记录'}}
+  </view>
 </view> 

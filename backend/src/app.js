@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 
 // 导入路由
 const patientRoutes = require('./routes/patientRoutes');
@@ -15,6 +16,9 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
+
+// 静态文件服务 - 用于访问上传的图片
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // API 路由
 app.use('/api/patients', patientRoutes);

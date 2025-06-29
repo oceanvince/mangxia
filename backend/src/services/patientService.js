@@ -92,7 +92,8 @@ const getPatientById = async (patientId) => {
         mp.status,
         TO_CHAR(mp.created_at, 'YYYY-MM-DD HH24:MI:SS') AS created_at,
         hm.metric_value AS inr_value,
-        TO_CHAR(hm.measured_at, 'YYYY-MM-DD') AS measurement_date
+        TO_CHAR(hm.measured_at, 'YYYY-MM-DD') AS measurement_date,
+        hm.metadata
       FROM medication_plan_tab mp
       LEFT JOIN health_metrics_tab hm ON mp.metric_id = hm.metric_id
       WHERE mp.patient_id = $1
@@ -100,23 +101,48 @@ const getPatientById = async (patientId) => {
     `;
     const { rows: medicationRows } = await db.query(medicationQuery, [patientId]);
     
+    // 处理medication plans中的图片信息
+    const processedMedicationPlans = medicationRows.map(row => {
+      const result = { ...row };
+      if (row.metadata && row.metadata.image) {
+        result.image_url = `/uploads/images/${row.metadata.image.filename}`;
+        result.has_image = true;
+      } else {
+        result.has_image = false;
+      }
+      return result;
+    });
+    
     const healthMetricsQuery = `
       SELECT 
         metric_id as id,
         metric_type,
         metric_value,
         unit,
-        TO_CHAR(measured_at, 'YYYY-MM-DD HH24:MI:SS') as measured_at
+        TO_CHAR(measured_at, 'YYYY-MM-DD HH24:MI:SS') as measured_at,
+        metadata
       FROM health_metrics_tab
       WHERE patient_id = $1
       ORDER BY measured_at DESC;
     `;
     const { rows: healthMetricsRows } = await db.query(healthMetricsQuery, [patientId]);
+    
+    // 处理图片URL
+    const processedHealthMetrics = healthMetricsRows.map(row => {
+      const result = { ...row };
+      if (row.metadata && row.metadata.image) {
+        result.image_url = `/uploads/images/${row.metadata.image.filename}`;
+        result.has_image = true;
+      } else {
+        result.has_image = false;
+      }
+      return result;
+    });
 
     const result = {
       ...patientRows[0],
-      medication_plans: medicationRows,
-      health_metrics: healthMetricsRows,
+      medication_plans: processedMedicationPlans,
+      health_metrics: processedHealthMetrics,
     };
     
     return { success: true, data: result };
@@ -129,46 +155,55 @@ const getPatientById = async (patientId) => {
 // 获取患者当前状态
 const getCurrentStatus = async (patientId) => {
   try {
-    // 简化查询，直接JOIN表
-    const query = `
+    // 分两步查询：1. 获取最新的active记录  2. 获取患者基本信息
+    const activeQuery = `
       SELECT 
-        p.patient_id,
-        p.name AS patient_name,
-        p.phone,
-        COALESCE(mp.doctor_suggested_dosage, mp.system_suggested_dosage, 0) AS current_dosage,
-        hm.metric_value AS latest_inr,
+        mp.plan_id,
+        mp.doctor_suggested_dosage,
+        mp.system_suggested_dosage,
+        hm.metric_value,
         TO_CHAR(hm.measured_at, 'YYYY-MM-DD') AS measurement_date,
-        mp.status AS plan_status,
         TO_CHAR(mp.updated_at, 'YYYY-MM-DD HH24:MI:SS') AS updated_at
-      FROM patient_profile_tab p
-      LEFT JOIN medication_plan_tab mp ON p.patient_id = mp.patient_id 
-        AND mp.status IN ('active', 'pending')
+      FROM medication_plan_tab mp
       LEFT JOIN health_metrics_tab hm ON mp.metric_id = hm.metric_id
-      WHERE p.patient_id = $1
+      WHERE mp.patient_id = $1 AND mp.status = 'active'
       ORDER BY mp.created_at DESC
       LIMIT 1;
     `;
     
-    const { rows } = await db.query(query, [patientId]);
+    const patientQuery = `
+      SELECT 
+        patient_id,
+        name AS patient_name,
+        phone
+      FROM patient_profile_tab 
+      WHERE patient_id = $1;
+    `;
     
-    if (rows.length === 0) {
+    const [activeResult, patientResult] = await Promise.all([
+      db.query(activeQuery, [patientId]),
+      db.query(patientQuery, [patientId])
+    ]);
+    
+    if (patientResult.rows.length === 0) {
       return { success: false, error: '患者不存在' };
     }
     
-    const data = rows[0];
+    const patientData = patientResult.rows[0];
+    const activeData = activeResult.rows[0];
     
-    // 格式化数据结构以匹配小程序期望
+    // 如果没有active记录，使用默认值
     const result = {
-      patient_id: data.patient_id,
-      patient_name: data.patient_name,
-      phone: data.phone,
-      current_dosage: data.current_dosage,
+      patient_id: patientData.patient_id,
+      patient_name: patientData.patient_name,
+      phone: patientData.phone,
+      current_dosage: activeData ? (activeData.doctor_suggested_dosage || activeData.system_suggested_dosage || 0) : 0,
       metric: {
-        value: data.latest_inr,
-        measured_at: data.measurement_date
+        value: activeData ? activeData.metric_value : null,
+        measured_at: activeData ? activeData.measurement_date : null
       },
-      status: data.plan_status,
-      updated_at: data.updated_at
+      status: 'active',
+      updated_at: activeData ? activeData.updated_at : null
     };
     
     return { success: true, data: result };
@@ -283,15 +318,31 @@ const registerPatient = async (patientData) => {
 };
 
 // 添加健康指标
-const addHealthMetric = async (patientId, metricData) => {
+const addHealthMetric = async (patientId, metricData, imageFile = null) => {
   const client = await db.getClient();
   try {
     await client.query('BEGIN');
     
+    // 使用提供的检查时间或当前时间
+    const measuredAt = metricData.measured_at || new Date().toISOString();
+    
+    // 准备metadata，包含图片信息
+    let metadata = {};
+    if (imageFile) {
+      metadata.image = {
+        filename: imageFile.filename,
+        originalname: imageFile.originalname,
+        path: imageFile.path,
+        size: imageFile.size,
+        mimetype: imageFile.mimetype,
+        uploadedAt: new Date().toISOString()
+      };
+    }
+    
     const metricResult = await client.query(
-      `INSERT INTO health_metrics_tab (patient_id, metric_type, metric_value, measured_at)
-       VALUES ($1, $2, $3, CURRENT_TIMESTAMP) RETURNING metric_id`,
-      [patientId, metricData.metric_type, metricData.metric_value]
+      `INSERT INTO health_metrics_tab (patient_id, metric_type, metric_value, measured_at, metadata, created_at)
+       VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP) RETURNING metric_id`,
+      [patientId, metricData.metric_type, metricData.metric_value, measuredAt, JSON.stringify(metadata)]
     );
     
     const metricId = metricResult.rows[0].metric_id;
@@ -315,7 +366,17 @@ const addHealthMetric = async (patientId, metricData) => {
     );
     
     await client.query('COMMIT');
-    return { success: true, message: '健康指标添加成功' };
+    return { 
+      success: true, 
+      message: '健康指标添加成功',
+      data: {
+        metricId: metricId,
+        inrValue: metricData.metric_value,
+        systemSuggestedDosage: systemSuggestedDosage,
+        status: 'pending',
+        message: '已生成用药建议，等待医生确认'
+      }
+    };
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('添加健康指标失败:', error);
@@ -559,12 +620,64 @@ const unbindAccountFromProfile = async (accountId, patientId) => {
   }
 };
 
+// 获取患者健康指标记录
+const getPatientMetrics = async (patientId) => {
+  try {
+    const query = `
+      SELECT 
+        hm.metric_id,
+        hm.patient_id,
+        hm.metric_type,
+        hm.metric_value,
+        TO_CHAR(hm.measured_at, 'YYYY-MM-DD HH24:MI:SS') AS measured_at,
+        TO_CHAR(hm.created_at, 'YYYY-MM-DD HH24:MI:SS') AS created_at,
+        hm.metadata,
+        mp.plan_id,
+        mp.status,
+        mp.system_suggested_dosage,
+        mp.doctor_suggested_dosage,
+        TO_CHAR(mp.created_at, 'YYYY-MM-DD HH24:MI:SS') AS plan_created_at,
+        TO_CHAR(mp.updated_at, 'YYYY-MM-DD HH24:MI:SS') AS plan_updated_at
+      FROM health_metrics_tab hm
+      LEFT JOIN medication_plan_tab mp ON hm.metric_id = mp.metric_id
+      WHERE hm.patient_id = $1
+      ORDER BY hm.measured_at DESC, hm.created_at DESC
+    `;
+    
+    const { rows } = await db.query(query, [patientId]);
+    
+    // 处理图片URL
+    const processedRows = rows.map(row => {
+      const result = { ...row };
+      if (row.metadata && row.metadata.image) {
+        result.image_url = `/uploads/images/${row.metadata.image.filename}`;
+        result.has_image = true;
+      } else {
+        result.has_image = false;
+      }
+      return result;
+    });
+    
+    return {
+      success: true,
+      data: processedRows
+    };
+  } catch (error) {
+    console.error('Error fetching patient metrics:', error);
+    return {
+      success: false,
+      error: '获取患者健康指标失败'
+    };
+  }
+};
+
 module.exports = {
   getAllPatients,
   getPatientById,
   getCurrentStatus,
   getPatientProfile,
   getLatestActivePlans,
+  getPatientMetrics,
   registerPatient,
   addHealthMetric,
   updateMedicationPlan,

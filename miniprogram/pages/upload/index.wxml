@@ -1,0 +1,35 @@
+<view class="container">
+  <view class="form-item">
+    <text class="label">化验时间</text>
+    <picker mode="date" value="{{measureDate}}" bindchange="onDateChange">
+      <view class="picker-value">{{displayDate || '请选择日期'}}</view>
+    </picker>
+  </view>
+
+  <view class="form-item">
+    <text class="label">最新INR凝血指标</text>
+    <input 
+      class="input" 
+      type="digit" 
+      placeholder="请输入INR值" 
+      value="{{inrValue}}" 
+      bindinput="onInrInput"
+    />
+  </view>
+
+  <view class="form-item">
+    <text class="label">上传化验单(可选)</text>
+    <view class="upload-area" bindtap="onChooseImage">
+      <view wx:if="{{!imageUrl}}" class="upload-placeholder">
+        <text class="upload-text">选择图片</text>
+      </view>
+      <image wx:else class="uploaded-image" src="{{imageUrl}}" mode="aspectFit"></image>
+    </view>
+  </view>
+
+  <view class="submit-btn-container">
+    <button class="submit-btn" bindtap="onSubmitTap" disabled="{{isSubmitting}}">
+      {{isSubmitting ? '提交中...' : '提交记录'}}
+    </button>
+  </view>
+</view> 
