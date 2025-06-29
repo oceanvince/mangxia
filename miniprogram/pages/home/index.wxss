@@ -5,6 +5,38 @@
   box-sizing: border-box;
 }
 
+/* 状态Banner样式 */
+.status-banner {
+  margin-bottom: 20rpx;
+  padding: 24rpx;
+  border-radius: 12rpx;
+  text-align: center;
+  font-size: 28rpx;
+}
+
+.status-banner.pending {
+  background: #fff7e6;
+  border: 1rpx solid #ffd666;
+}
+
+.status-banner.approved {
+  background: #f6ffed;
+  border: 1rpx solid #b7eb8f;
+}
+
+.banner-text {
+  color: #333;
+  font-weight: 500;
+}
+
+.status-banner.pending .banner-text {
+  color: #d46b08;
+}
+
+.status-banner.approved .banner-text {
+  color: #389e0d;
+}
+
 .card {
   background: #fff;
   border-radius: 16rpx;
@@ -43,4 +75,9 @@
   padding: 24rpx 0;
   border-radius: 8rpx;
   font-size: 32rpx;
+}
+
+.upload-btn.disabled {
+  background: #d9d9d9;
+  color: #999;
 } 

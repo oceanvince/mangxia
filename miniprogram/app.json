@@ -4,7 +4,8 @@
     "pages/login/index",
     "pages/bind/index",
     "pages/history/index",
-    "pages/profile/index"
+    "pages/profile/index",
+    "pages/upload/index"
   ],
   "window": {
     "backgroundTextStyle": "light",

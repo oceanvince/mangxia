@@ -650,6 +650,7 @@ function PatientDetailPage() {
                 <th>华法林之前用量</th>
                 <th>最新INR</th>
                 <th>化验时间</th>
+                <th>化验单</th>
                 <th>更新建议用量</th>
                 <th>医生确认用量</th>
                 <th>确认状态</th>
@@ -664,6 +665,26 @@ function PatientDetailPage() {
                   <td>{plan.previous_dosage || '-'}</td>
                   <td>{plan.inr_value || '-'}</td>
                   <td>{plan.measurement_date || '-'}</td>
+                  <td>
+                    {plan.has_image ? (
+                      <button 
+                        onClick={() => window.open(`http://localhost:3001${plan.image_url}`, '_blank')}
+                        style={{ 
+                          padding: '4px 8px', 
+                          fontSize: '12px', 
+                          backgroundColor: '#1890ff', 
+                          color: 'white', 
+                          border: 'none', 
+                          borderRadius: '4px', 
+                          cursor: 'pointer' 
+                        }}
+                      >
+                        查看图片
+                      </button>
+                    ) : (
+                      '-'
+                    )}
+                  </td>
                   <td>{plan.system_suggested_dosage || '-'}</td>
                   <td>
                     {editingPlan && editingPlan.plan_id === plan.plan_id ? (
