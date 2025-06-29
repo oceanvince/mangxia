@@ -109,13 +109,13 @@ Page({
 
       console.log('Bind response:', response)
 
-      // Check if response has data property
-      if (!response.data) {
+      // Check if response has success property
+      if (response.success === undefined) {
         throw new Error('服务器响应异常')
       }
 
       // If response indicates success
-      if (response.data.success) {
+      if (response.success) {
         wx.showToast({
           title: '绑定成功',
           icon: 'success'
@@ -134,10 +134,10 @@ Page({
           }
         })
 
-        if (tokenResponse.data && tokenResponse.data.success && tokenResponse.data.token) {
+        if (tokenResponse && tokenResponse.success && tokenResponse.token) {
           // Update token in storage and global state
-          wx.setStorageSync('token', tokenResponse.data.token)
-          app.globalData.token = tokenResponse.data.token
+          wx.setStorageSync('token', tokenResponse.token)
+          app.globalData.token = tokenResponse.token
         }
 
         // Redirect to home page
@@ -148,7 +148,7 @@ Page({
         }, 1500)
       } else {
         // Handle error from backend
-        throw new Error(response.data.error || '绑定失败')
+        throw new Error(response.error || '绑定失败')
       }
 
     } catch (error) {

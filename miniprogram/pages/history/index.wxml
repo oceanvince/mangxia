@@ -17,7 +17,7 @@
       </view>
       <view class="info-row">
         <text class="label">医嘱华法林剂量</text>
-        <text class="value">{{item.doctor_suggested_dosage || '-'}}</text>
+        <text class="value {{item.status === 'pending' ? 'pending' : ''}}">{{item.suggested_dosage === '-' ? '-' : (item.suggested_dosage === '待医生确认' ? '待医生确认' : item.suggested_dosage + 'mg')}}</text>
       </view>
       <view class="info-row">
         <text class="label">医嘱生效时间</text>

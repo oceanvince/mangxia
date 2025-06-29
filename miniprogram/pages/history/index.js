@@ -94,17 +94,28 @@ Page({
       })
       
       if (res.success) {
-        // 格式化时间
-        const formattedData = res.data.map(plan => ({
-          plan_id: plan.plan_id,
-          metric_value: plan.metric?.metric_value,
-          metric_measured_at: this.formatDateTime(plan.metric?.measured_at),
-          metric_created_at: this.formatDateTime(plan.metric?.created_at),
-          doctor_suggested_dosage: plan.doctor_suggested_dosage,
-          plan_updated_at: this.formatDateTime(plan.updated_at),
-          plan_created_at: this.formatDateTime(plan.created_at),
-          status: plan.status
-        }));
+        // 格式化时间和处理剂量显示
+        const formattedData = res.data.map(plan => {
+          // 只显示医生确认的剂量
+          let dosage = '-';
+          
+          if (plan.status === 'pending') {
+            dosage = '待医生确认';
+          } else if (plan.status === 'active' && plan.doctor_suggested_dosage) {
+            dosage = plan.doctor_suggested_dosage;
+          }
+          
+          return {
+            plan_id: plan.plan_id,
+            metric_value: plan.metric_value,
+            metric_measured_at: this.formatDateTime(plan.metric_measured_at),
+            metric_created_at: this.formatDateTime(plan.metric_created_at),
+            suggested_dosage: dosage,
+            plan_updated_at: this.formatDateTime(plan.plan_updated_at),
+            plan_created_at: this.formatDateTime(plan.plan_created_at),
+            status: plan.status
+          };
+        });
         
         this.setData({
           historyData: formattedData

@@ -253,11 +253,12 @@ const registerPatient = async (patientData) => {
     const patientId = patientResult.rows[0].patient_id;
     
     if (patientData.metric_value) {
+      const measuredAt = patientData.measured_at || 'CURRENT_TIMESTAMP';
       const metricResult = await client.query(
         `INSERT INTO health_metrics_tab 
          (patient_id, metric_type, metric_value, measured_at) 
-         VALUES ($1, $2, $3, CURRENT_TIMESTAMP) RETURNING metric_id`,
-        [patientId, 'INR', patientData.metric_value]
+         VALUES ($1, $2, $3, $4) RETURNING metric_id`,
+        [patientId, 'INR', patientData.metric_value, measuredAt]
       );
       
       const metricId = metricResult.rows[0].metric_id;

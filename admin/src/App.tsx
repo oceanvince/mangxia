@@ -774,7 +774,7 @@ function AddPatientPage() {
           operation_date: formData.surgeryDate,
           discharge_date: formData.dischargeDate,
           metric_value: formData.inr,
-          measurement_time: formData.inrDate,
+          measured_at: formData.inrDate,
           doctor_suggested_dosage: formData.dose,
           remarks: formData.note,
         }),
